@@ -5,6 +5,11 @@ declare module "inline:*" {
   export default content
 }
 
+declare module "gi://AstalNiri" {
+  const AstalNiri: any
+  export default AstalNiri
+}
+
 declare module "*.scss" {
   const content: string
   export default content

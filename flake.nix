@@ -8,12 +8,18 @@
       url = "github:aylur/ags";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    astal-niri = {
+      url = "github:sameoldlab/astal/feat/niri";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
     self,
     nixpkgs,
     ags,
+    astal-niri,
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
@@ -23,6 +29,7 @@
     astalPackages = with ags.packages.${system}; [
       io
       astal4 # or astal3 for gtk3
+      astal-niri.packages.${system}.niri
       # notifd tray wireplumber
     ];
 
