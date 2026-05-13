@@ -29,8 +29,9 @@
     astalPackages = with ags.packages.${system}; [
       io
       astal4 # or astal3 for gtk3
+      notifd
       astal-niri.packages.${system}.niri
-      # notifd tray wireplumber
+      # tray wireplumber
     ];
 
     extraPackages =

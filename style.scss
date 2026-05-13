@@ -60,6 +60,25 @@ window.Bar {
     }
   }
 
+  button.notification-toggle {
+    border: 0;
+    margin: 0.375rem 0.25rem 0;
+    min-height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0.125rem;
+
+    .notification-badge {
+      background: #ff6c6b;
+      border-radius: 999px;
+      color: #ffffff;
+      font-size: 0.58rem;
+      font-weight: bold;
+      margin-top: -0.25rem;
+      min-height: 0.875rem;
+      min-width: 0.875rem;
+    }
+  }
+
   button.workspace {
     background: #c678dd;
     border: 0;
@@ -111,5 +130,163 @@ window.Bar {
         background: $hover-color;
       }
     }
+  }
+}
+
+window.Notifications {
+  background: transparent;
+  color: $fg-color;
+
+  > box {
+    margin: 0.75rem;
+  }
+
+  .notification {
+    background: $bg-color;
+    border: 1px solid $border-color;
+    border-radius: 0.5rem;
+    margin: 0 0 0.5rem;
+    min-width: 20rem;
+    padding: 0.5rem 0.75rem 0.75rem;
+
+    &:hover {
+      background: $hover-color;
+    }
+  }
+
+  .notification-progress {
+    min-height: 0.25rem;
+    margin: 0 0 0.5rem;
+  }
+
+  .notification-content {
+    margin-left: 0.75rem;
+  }
+
+  .notification-title {
+    font-weight: bold;
+  }
+
+  .notification-body {
+    color: $fg-color;
+    margin-top: 0.25rem;
+  }
+
+  button.notification-close {
+    border: 0;
+    border-radius: 999px;
+    margin: 0 0 0 0.5rem;
+    min-height: 1.5rem;
+    min-width: 1.5rem;
+    padding: 0;
+  }
+}
+
+window.NotificationCenter {
+  background: transparent;
+  color: $fg-color;
+
+  > box {
+    background: $bg-color;
+    border-left: 1px solid $border-color;
+    min-width: 24rem;
+    padding: 0.875rem;
+  }
+
+  button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.375rem;
+    color: $fg-color;
+    padding: 0.375rem 0.5rem;
+
+    &:hover {
+      background: $hover-color;
+      border-color: $border-color;
+    }
+  }
+
+  .notification-center-header {
+    margin-bottom: 0.625rem;
+  }
+
+  .notification-center-title {
+    font-size: 1.05rem;
+    font-weight: bold;
+  }
+
+  button.dnd.active {
+    background: $active-color;
+    color: $base-color;
+  }
+
+  .notification-center-toolbar {
+    margin-bottom: 0.75rem;
+
+    button {
+      margin-right: 0.375rem;
+    }
+  }
+
+  .notification-list {
+    padding-right: 0.25rem;
+  }
+
+  .notification-empty {
+    color: #7f8490;
+    margin-top: 4rem;
+
+    label {
+      margin-top: 0.5rem;
+    }
+  }
+
+  .notification-center-card {
+    background: $base-color;
+    border: 1px solid $border-color;
+    border-radius: 0.5rem;
+    margin-bottom: 0.625rem;
+    padding: 0.75rem;
+
+    &.unread {
+      border-color: $active-color;
+    }
+  }
+
+  .notification-center-content {
+    margin-left: 0.75rem;
+  }
+
+  .notification-app,
+  .notification-time {
+    color: #7f8490;
+    font-size: 0.72rem;
+  }
+
+  .notification-title {
+    font-weight: bold;
+    margin-top: 0.125rem;
+  }
+
+  .notification-body {
+    margin-top: 0.25rem;
+  }
+
+  .notification-actions,
+  .notification-card-footer {
+    margin-top: 0.5rem;
+  }
+
+  .notification-action,
+  .notification-secondary {
+    margin-right: 0.375rem;
+  }
+
+  button.notification-close {
+    border: 0;
+    margin-left: 0.375rem;
+    min-height: 1.375rem;
+    min-width: 1.375rem;
+    padding: 0;
   }
 }
