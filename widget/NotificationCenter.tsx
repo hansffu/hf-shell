@@ -9,6 +9,7 @@ import {
   markAllRead,
   markRead,
   notifd,
+  notificationUrgency,
   records,
   unreadCount,
 } from "../service/Notifications"
@@ -69,9 +70,10 @@ function NotificationCenterCard({ record }: { record: NotificationRecord }) {
   const cardIcon = createComputed(() => appIcon() || desktopEntry() || iconName(record))
   const cardTitle = createComputed(() => summary() || title(record))
   const cardBody = createComputed(() => plainBody(body()))
+  const urgency = notificationUrgency(notification)
   const cardClass = record.read
-    ? "notification-center-card"
-    : "notification-center-card unread"
+    ? `notification-center-card ${urgency}`
+    : `notification-center-card ${urgency} unread`
 
   return (
     <box class={cardClass} orientation={Gtk.Orientation.VERTICAL}>
@@ -80,6 +82,11 @@ function NotificationCenterCard({ record }: { record: NotificationRecord }) {
         <box class="notification-center-content" orientation={Gtk.Orientation.VERTICAL} hexpand>
           <box orientation={Gtk.Orientation.HORIZONTAL}>
             <label class="notification-app" xalign={0} label={appName} hexpand />
+            <label
+              class={`notification-urgency ${urgency}`}
+              label={urgency}
+              visible={urgency !== "normal"}
+            />
             <label class="notification-time" label={timestamp(record.receivedAt)} />
             <button
               class="notification-close"

@@ -19,6 +19,7 @@ export type Notification = GObject.Object & {
   body: string
   desktop_entry: string
   image: string
+  urgency: number
   actions: NotificationAction[]
   dismiss(): void
 }
@@ -38,9 +39,13 @@ export type NotificationRecord = {
   resolved: boolean
 }
 
+export type NotificationUrgency = "low" | "normal" | "critical"
+
 export type NotificationPopup = {
   id: number
   notification: Notification
+  urgency: NotificationUrgency
+  timeoutMs: number
   remainingMs: Accessor<number>
   setRemainingMs: Setter<number>
   hovered: Accessor<boolean>
@@ -48,12 +53,13 @@ export type NotificationPopup = {
   timerId: number
 }
 
-const POPUP_TIMEOUT_MS = 6000
+const LOW_POPUP_TIMEOUT_MS = 4000
+const NORMAL_POPUP_TIMEOUT_MS = 6000
+const CRITICAL_POPUP_TIMEOUT_MS = 0
 const TICK_MS = 100
 const IDLE_THRESHOLD_MS = 60_000
 
 export const notifd = Notifd.get_default() as NotifdService
-export const popupTimeoutMs = POPUP_TIMEOUT_MS
 export const [records, setRecords] = createState<NotificationRecord[]>([])
 export const [popups, setPopups] = createState<NotificationPopup[]>([])
 export const unreadCount = createComputed(
@@ -63,6 +69,20 @@ export const hasPopups = createComputed(() => popups().length > 0)
 
 let isUserIdle = false
 let hasSeenActiveSession = false
+
+export function notificationUrgency(notification: Notification): NotificationUrgency {
+  if (notification.urgency === 0) return "low"
+  if (notification.urgency === 2) return "critical"
+  return "normal"
+}
+
+export function popupTimeoutFor(notification: Notification) {
+  const urgency = notificationUrgency(notification)
+
+  if (urgency === "low") return LOW_POPUP_TIMEOUT_MS
+  if (urgency === "critical") return CRITICAL_POPUP_TIMEOUT_MS
+  return NORMAL_POPUP_TIMEOUT_MS
+}
 
 function sessionIdleMs() {
   try {
@@ -168,11 +188,15 @@ export function removePopup(id: number) {
 function addPopup(notification: Notification) {
   removePopup(notification.id)
 
-  const [remainingMs, setRemainingMs] = createState(POPUP_TIMEOUT_MS)
+  const urgency = notificationUrgency(notification)
+  const timeoutMs = popupTimeoutFor(notification)
+  const [remainingMs, setRemainingMs] = createState(timeoutMs)
   const [hovered, setHovered] = createState(false)
   const popup: NotificationPopup = {
     id: notification.id,
     notification,
+    urgency,
+    timeoutMs,
     remainingMs,
     setRemainingMs,
     hovered,
@@ -180,18 +204,20 @@ function addPopup(notification: Notification) {
     timerId: 0,
   }
 
-  popup.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, TICK_MS, () => {
-    if (hovered() || isUserIdle) return GLib.SOURCE_CONTINUE
+  if (timeoutMs > 0) {
+    popup.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, TICK_MS, () => {
+      if (hovered() || isUserIdle) return GLib.SOURCE_CONTINUE
 
-    const nextRemaining = remainingMs() - TICK_MS
-    setRemainingMs(Math.max(0, nextRemaining))
+      const nextRemaining = remainingMs() - TICK_MS
+      setRemainingMs(Math.max(0, nextRemaining))
 
-    if (nextRemaining > 0) return GLib.SOURCE_CONTINUE
+      if (nextRemaining > 0) return GLib.SOURCE_CONTINUE
 
-    popup.timerId = 0
-    removePopup(notification.id)
-    return GLib.SOURCE_REMOVE
-  })
+      popup.timerId = 0
+      removePopup(notification.id)
+      return GLib.SOURCE_REMOVE
+    })
+  }
 
   setPopups((current) => [popup, ...current])
 }

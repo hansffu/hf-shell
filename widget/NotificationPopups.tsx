@@ -6,7 +6,6 @@ import {
   hasPopups,
   markRead,
   popups,
-  popupTimeoutMs,
   setPopupHover,
 } from "../service/Notifications"
 import type { NotificationPopup } from "../service/Notifications"
@@ -35,11 +34,13 @@ function PopupCard({ popup }: { popup: NotificationPopup }) {
   const iconName = createComputed(() => appIcon() || desktopEntry() || notificationIcon(popup))
   const title = createComputed(() => summary() || appName() || notificationTitle(popup))
   const text = createComputed(() => plainBody(body()))
-  const progress = createComputed(() => popup.remainingMs() / popupTimeoutMs)
+  const progress = createComputed(() =>
+    popup.timeoutMs === 0 ? 1 : popup.remainingMs() / popup.timeoutMs,
+  )
 
   return (
     <box
-      class="notification popup"
+      class={`notification popup ${popup.urgency}`}
       orientation={Gtk.Orientation.VERTICAL}
       $={(self) => {
         const motion = Gtk.EventControllerMotion.new()
@@ -49,7 +50,13 @@ function PopupCard({ popup }: { popup: NotificationPopup }) {
         self.add_controller(motion)
       }}
     >
-      <levelbar class="notification-progress" minValue={0} maxValue={1} value={progress} />
+      <levelbar
+        class={`notification-progress ${popup.urgency}`}
+        minValue={0}
+        maxValue={1}
+        value={progress}
+        visible={popup.timeoutMs > 0}
+      />
       <box orientation={Gtk.Orientation.HORIZONTAL}>
         <image iconName={iconName} pixelSize={32} useFallback />
         <box class="notification-content" orientation={Gtk.Orientation.VERTICAL}>
