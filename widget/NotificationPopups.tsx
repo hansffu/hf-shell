@@ -42,7 +42,7 @@ function PopupCard({ popup }: { popup: NotificationPopup }) {
     <box
       class={`notification popup ${popup.urgency}`}
       orientation={Gtk.Orientation.VERTICAL}
-      $={(self) => {
+      $={(self: Gtk.Box) => {
         const motion = Gtk.EventControllerMotion.new()
 
         motion.connect("enter", () => setPopupHover(popup.id, true))

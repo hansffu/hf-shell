@@ -1,24 +1,13 @@
 import { Gdk, Gtk } from "ags/gtk4"
-import Niri from "gi://AstalNiri"
+import AstalNiri from "gi://AstalNiri"
 import { createBinding, createComputed, For } from "gnim"
+import type { Accessor } from "gnim"
 
-type NiriWorkspace = {
-  id: number
-  idx: number
-  name: string | null
-  output: string | null
-  is_urgent: boolean
-  is_active: boolean
-  is_focused: boolean
-  windows: unknown[]
-  focus(): boolean
-}
-
-const niri = Niri.get_default()
+const niri = AstalNiri.get_default()
 
 function workspaceClass(
-  workspace: NiriWorkspace,
-  focusedWorkspace: NiriWorkspace | null,
+  workspace: AstalNiri.Workspace,
+  focusedWorkspace: AstalNiri.Workspace | null,
   windows: unknown[] | null,
 ) {
   const classes = ["workspace"]
@@ -36,15 +25,15 @@ function WorkspaceButton({
   workspace,
   focusedWorkspace,
 }: {
-  workspace: NiriWorkspace
-  focusedWorkspace: ReturnType<typeof createBinding>
+  workspace: AstalNiri.Workspace
+  focusedWorkspace: Accessor<AstalNiri.Workspace | null>
 }) {
   const windows = createBinding(workspace, "windows")
   const className = createComputed(() =>
     workspaceClass(
       workspace,
-      focusedWorkspace() as NiriWorkspace | null,
-      windows() as unknown[] | null,
+      focusedWorkspace(),
+      windows(),
     ),
   )
 
@@ -54,12 +43,12 @@ function WorkspaceButton({
 export default function Workspaces({ gdkmonitor }: { gdkmonitor: Gdk.Monitor }) {
   const output = gdkmonitor.connector
   const workspaces = createBinding(niri, "workspaces").as(
-    (workspaces: NiriWorkspace[] | null) =>
+    (workspaces: AstalNiri.Workspace[] | null) =>
       (workspaces ?? [])
         .filter((workspace) => !output || workspace.output === output)
         .sort((a, b) => a.idx - b.idx),
   )
-  const focusedWorkspace = createBinding(niri, "focusedWorkspace")
+  const focusedWorkspace = createBinding(niri, "focused_workspace")
 
   return (
     <box $type="center" class="Workspaces" orientation={Gtk.Orientation.VERTICAL}>

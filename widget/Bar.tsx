@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
 import NotificationButton from "./NotificationButton"
+import SystemTray from "./SystemTray"
 import Time from "./Time"
 import WorkspaceApps from "./WorkspaceApps"
 import Workspaces from "./Workspaces"
@@ -23,11 +24,12 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
           <Time />
           <NotificationButton />
           <WorkspaceApps />
+          <SystemTray />
         </box>
-        <box $type="center" vexpand />
-        <box $type="end" orientation={Gtk.Orientation.VERTICAL}>
+        <box $type="center" orientation={Gtk.Orientation.VERTICAL}>
           <Workspaces gdkmonitor={gdkmonitor} />
         </box>
+        <box $type="end" vexpand />
       </centerbox>
     </window>
   )

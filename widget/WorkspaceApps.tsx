@@ -1,44 +1,25 @@
 import { Gtk } from "ags/gtk4"
-import GObject from "gi://GObject"
-import Niri from "gi://AstalNiri"
+import AstalNiri from "gi://AstalNiri"
 import { createBinding, createComputed, For } from "gnim"
 
-type NiriWorkspace = GObject.Object & {
-  id: number
-}
+const niri = AstalNiri.get_default()
 
-type NiriWindowLayout = {
-  pos_in_scrolling_layout: [number, number]
-}
-
-type NiriWindow = GObject.Object & {
-  id: number
-  app_id: string | null
-  title: string | null
-  workspace_id: number
-  is_focused: boolean
-  layout: NiriWindowLayout | null
-  focus(id: number): boolean
-}
-
-const niri = Niri.get_default()
-
-function appLabel(window: NiriWindow) {
+function appLabel(window: AstalNiri.Window) {
   return window.app_id || window.title || "app"
 }
 
-function windowPosition(window: NiriWindow) {
+function windowPosition(window: AstalNiri.Window) {
   return window.layout?.pos_in_scrolling_layout ?? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]
 }
 
-function compareWindows(left: NiriWindow, right: NiriWindow) {
+function compareWindows(left: AstalNiri.Window, right: AstalNiri.Window) {
   const [leftColumn, leftRow] = windowPosition(left)
   const [rightColumn, rightRow] = windowPosition(right)
 
   return leftColumn - rightColumn || leftRow - rightRow || left.id - right.id
 }
 
-function AppButton({ window }: { window: NiriWindow }) {
+function AppButton({ window }: { window: AstalNiri.Window }) {
   const appId = createBinding(window, "app_id")
   const title = createBinding(window, "title")
   const isFocused = createBinding(window, "is_focused")
@@ -58,11 +39,11 @@ function AppButton({ window }: { window: NiriWindow }) {
 }
 
 export default function WorkspaceApps() {
-  const focusedWorkspace = createBinding(niri, "focusedWorkspace")
+  const focusedWorkspace = createBinding(niri, "focused_workspace")
   const windows = createBinding(niri, "windows")
   const workspaceWindows = createComputed(() => {
-    const workspace = focusedWorkspace() as NiriWorkspace | null
-    const allWindows = (windows() as NiriWindow[] | null) ?? []
+    const workspace = focusedWorkspace()
+    const allWindows = windows()
 
     if (!workspace) return []
 

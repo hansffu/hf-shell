@@ -36,8 +36,10 @@ function timestamp(receivedAt: number) {
   })
 }
 
-function actions(record: NotificationRecord) {
-  return (record.notification.actions ?? []).filter((action) => action.id !== "default")
+function actions(record: NotificationRecord): NotificationAction[] {
+  return ((record.notification.actions ?? []) as NotificationAction[]).filter(
+    (action) => action.id !== "default",
+  )
 }
 
 function ActionButton({
@@ -113,7 +115,7 @@ function NotificationCenterCard({ record }: { record: NotificationRecord }) {
         visible={actions(record).length > 0}
       >
         <For each={createComputed(() => actions(record))}>
-          {(action) => <ActionButton action={action} record={record} />}
+          {(action: NotificationAction) => <ActionButton action={action} record={record} />}
         </For>
       </box>
       <box class="notification-card-footer" orientation={Gtk.Orientation.HORIZONTAL}>

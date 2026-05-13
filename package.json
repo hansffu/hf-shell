@@ -1,4 +1,15 @@
 {
+  "scripts": {
+    "types": "ags types 'Astal*' --ignore Gtk3 --ignore Astal3 --directory .",
+    "check": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.0"
+  },
   "dependencies": {
     "ags": "*",
     "gnim": "*"
