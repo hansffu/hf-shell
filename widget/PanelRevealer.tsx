@@ -1,10 +1,12 @@
 import { Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
+import { registerPanelPopover } from "../service/Panels"
 
 export function setupPanelPopover(popover: Gtk.Popover) {
   popover.set_has_arrow(false)
   popover.set_position(Gtk.PositionType.RIGHT)
   popover.set_offset(0, 0)
+  registerPanelPopover(popover)
 }
 
 export default function PanelRevealer({ children }: { children: Gtk.Widget }) {

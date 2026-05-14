@@ -1,11 +1,13 @@
 import { Gtk } from "ags/gtk4"
+import type { Accessor } from "gnim"
+import { setupEscapeToClosePanel } from "../service/Panels"
 import PanelRevealer from "./PanelRevealer"
 
 type PanelProps = {
   children: Gtk.Widget | Gtk.Widget[]
   class?: string
   headerEnd?: Gtk.Widget
-  title: string
+  title: string | Accessor<string>
 }
 
 type PanelSectionProps = {
@@ -24,7 +26,14 @@ export default function Panel({
 
   return (
     <PanelRevealer>
-      <box class={classes} orientation={Gtk.Orientation.VERTICAL}>
+      <box
+        class={classes}
+        orientation={Gtk.Orientation.VERTICAL}
+        focusable
+        $={(box) => {
+          setupEscapeToClosePanel(box)
+        }}
+      >
         <box class="panel-header" orientation={Gtk.Orientation.HORIZONTAL}>
           <label class="panel-title" xalign={0} label={title} hexpand />
           {headerEnd}

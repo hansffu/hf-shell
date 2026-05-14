@@ -1,5 +1,6 @@
 import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
+import { setupEscapeToClosePanels } from "../service/Panels"
 import NotificationButton from "./NotificationButton"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
 import SoundControl from "./SoundControl"
@@ -20,6 +21,9 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
       exclusivity={Astal.Exclusivity.EXCLUSIVE}
       anchor={TOP | BOTTOM | LEFT}
       application={app}
+      $={(window) => {
+        setupEscapeToClosePanels(window)
+      }}
     >
       <centerbox cssName="centerbox" orientation={Gtk.Orientation.VERTICAL}>
         <box $type="start" orientation={Gtk.Orientation.VERTICAL}>
