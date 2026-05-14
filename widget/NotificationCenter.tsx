@@ -148,7 +148,7 @@ export default function NotificationCenter(gdkmonitor: Gdk.Monitor) {
       anchor={TOP | BOTTOM | RIGHT}
       application={app}
     >
-      <box orientation={Gtk.Orientation.VERTICAL}>
+      <box class="shell-panel notification-center-panel" orientation={Gtk.Orientation.VERTICAL}>
         <box class="notification-center-header" orientation={Gtk.Orientation.HORIZONTAL}>
           <label class="notification-center-title" xalign={0} hexpand label={titleText} />
           <button

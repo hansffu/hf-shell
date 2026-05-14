@@ -31,8 +31,8 @@
       astal4 # or astal3 for gtk3
       notifd
       tray
+      wireplumber
       astal-niri.packages.${system}.niri
-      # wireplumber
     ];
 
     extraPackages =

@@ -40,7 +40,7 @@ function PopupCard({ popup }: { popup: NotificationPopup }) {
 
   return (
     <box
-      class={`notification popup ${popup.urgency}`}
+      class={`shell-panel notification popup ${popup.urgency}`}
       orientation={Gtk.Orientation.VERTICAL}
       $={(self: Gtk.Box) => {
         const motion = Gtk.EventControllerMotion.new()

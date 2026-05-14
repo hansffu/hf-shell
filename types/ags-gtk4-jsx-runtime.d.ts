@@ -1,4 +1,5 @@
 declare module "ags/gtk4/jsx-runtime" {
+  import Astal from "gi://Astal?version=4.0"
   import Gtk from "gi://Gtk?version=4.0"
 
   type WidgetProps<T extends Gtk.Widget> = Record<string, unknown> & {
@@ -20,6 +21,7 @@ declare module "ags/gtk4/jsx-runtime" {
       popover: WidgetProps<Gtk.Popover>
       revealer: WidgetProps<Gtk.Revealer>
       scrolledwindow: WidgetProps<Gtk.ScrolledWindow>
+      slider: WidgetProps<Astal.Slider>
       stack: WidgetProps<Gtk.Stack>
       switch: WidgetProps<Gtk.Switch>
       togglebutton: WidgetProps<Gtk.ToggleButton>
