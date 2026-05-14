@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
 import NotificationButton from "./NotificationButton"
+import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
 import SoundControl from "./SoundControl"
 import SystemTray from "./SystemTray"
 import Time from "./Time"
@@ -31,6 +32,8 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
           <Workspaces gdkmonitor={gdkmonitor} />
         </box>
         <box $type="end" orientation={Gtk.Orientation.VERTICAL}>
+          <ScreenToolkit gdkmonitor={gdkmonitor} />
+          <ScreenCaptureStopButton />
           <SoundControl />
         </box>
       </centerbox>

@@ -35,8 +35,30 @@
       astal-niri.packages.${system}.niri
     ];
 
+    screenToolkitPackages = with pkgs; [
+      curl
+      ffmpeg
+      gifski
+      grim
+      hyprpicker
+      imagemagick
+      jq
+      libnotify
+      satty
+      slurp
+      swappy
+      tesseract
+      wf-recorder
+      wl-clipboard
+      wl-screenrec
+      xdg-utils
+      zbar
+      zenity
+    ];
+
     extraPackages =
       astalPackages
+      ++ screenToolkitPackages
       ++ [
         pkgs.libadwaita
         pkgs.libsoup_3
@@ -54,6 +76,12 @@
         ];
 
         buildInputs = extraPackages ++ [pkgs.gjs];
+
+        preFixup = ''
+          gappsWrapperArgs+=(
+            --prefix PATH : "${pkgs.lib.makeBinPath screenToolkitPackages}"
+          )
+        '';
 
         installPhase = ''
           runHook preInstall

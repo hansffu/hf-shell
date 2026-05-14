@@ -1,0 +1,507 @@
+#!/usr/bin/env sh
+
+set -eu
+
+APP_NAME="Screen Toolkit"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hf-shell/screen-toolkit"
+TMP_DIR="${XDG_RUNTIME_DIR:-/tmp}/hf-shell-screen-toolkit"
+SCREENSHOT_DIR="${SCREEN_TOOLKIT_SCREENSHOT_DIR:-$HOME/Pictures/Screenshots}"
+VIDEO_DIR="${SCREEN_TOOLKIT_VIDEO_DIR:-$HOME/Videos}"
+FILENAME_FORMAT="${SCREEN_TOOLKIT_FILENAME_FORMAT:-%Y-%m-%d_%H-%M-%S}"
+OCR_LANG="${SCREEN_TOOLKIT_OCR_LANG:-eng}"
+RECORD_PID="$STATE_DIR/record.pid"
+RECORD_META="$STATE_DIR/record.meta"
+COMMAND="${1:-}"
+ARG_FORMAT="${2:-}"
+ARG_SCOPE="${3:-}"
+ARG_DURATION="${4:-}"
+
+usage() {
+  cat <<EOF
+Usage: $0 <command>
+
+Commands:
+  annotate annotateFullscreen annotateWindow
+  colorPicker ocr qr palette lens measure
+  pin pinImage capture status record recordMp4 recordFullscreen recordFullscreenMp4 recordStop
+EOF
+}
+
+notify() {
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "$APP_NAME" "$1"
+  fi
+}
+
+need() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    notify "Missing dependency: $1"
+    exit 1
+  fi
+}
+
+copy_text() {
+  if command -v wl-copy >/dev/null 2>&1; then
+    printf "%s" "$1" | wl-copy
+  fi
+}
+
+copy_png() {
+  if command -v wl-copy >/dev/null 2>&1; then
+    wl-copy --type image/png < "$1"
+  fi
+}
+
+open_uri() {
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$1" >/dev/null 2>&1 &
+  else
+    notify "$1"
+  fi
+}
+
+timestamp() {
+  date +"$FILENAME_FORMAT"
+}
+
+filename() {
+  directory="$1"
+  prefix="$2"
+  extension="$3"
+  mkdir -p "$directory"
+  printf "%s/%s-%s.%s" "$directory" "$prefix" "$(timestamp)" "$extension"
+}
+
+temp_png() {
+  printf "%s/%s-%s.png" "$TMP_DIR" "$1" "$$"
+}
+
+capture_region() {
+  output="$1"
+  need grim
+  need slurp
+  geometry="$(slurp)" || exit 1
+  [ -n "$geometry" ] || exit 1
+  grim -g "$geometry" "$output"
+}
+
+capture_fullscreen() {
+  output="$1"
+  need grim
+  grim "$output"
+}
+
+capture_window() {
+  output="$1"
+  need grim
+  geometry="$(active_window_geometry)"
+
+  [ -n "$geometry" ] || exit 1
+  grim -g "$geometry" "$output"
+}
+
+active_window_geometry() {
+  need jq
+
+  if ! command -v hyprctl >/dev/null 2>&1; then
+    notify "Active-window capture requires Hyprland"
+    exit 1
+  fi
+
+  hyprctl activewindow -j |
+    jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' |
+    sed '/^null,null nullxnull$/d'
+}
+
+recording_pid() {
+  [ -f "$RECORD_PID" ] || return 1
+  pid="$(cat "$RECORD_PID")"
+  kill -0 "$pid" 2>/dev/null || return 1
+  printf "%s\n" "$pid"
+}
+
+recording_elapsed() {
+  [ -f "$RECORD_META" ] || {
+    printf "0\n"
+    return
+  }
+
+  started_at="$(
+    awk -F= '$1 == "started_at" { print $2 }' "$RECORD_META" |
+      sed -n '1p'
+  )"
+  [ -n "$started_at" ] || started_at="$(date +%s)"
+  now="$(date +%s)"
+  printf "%s\n" "$((now - started_at))"
+}
+
+record_status() {
+  if recording_pid >/dev/null; then
+    elapsed="$(recording_elapsed)"
+    printf "recording %s\n" "$elapsed"
+  else
+    rm -f "$RECORD_PID" "$RECORD_META"
+    printf "idle\n"
+  fi
+}
+
+recording_geometry() {
+  scope="$1"
+
+  case "$scope" in
+    fullscreen) ;;
+    region)
+      need slurp
+      slurp
+      ;;
+    window)
+      active_window_geometry
+      ;;
+    *)
+      notify "Unknown capture scope: $scope"
+      exit 1
+      ;;
+  esac
+}
+
+record_start() {
+  mode="$1"
+  scope="$2"
+  duration="${3:-}"
+
+  if recording_pid >/dev/null; then
+    notify "Recording is already running"
+    exit 1
+  fi
+
+  geometry="$(recording_geometry "$scope")" || exit 1
+  [ "$scope" = "fullscreen" ] || [ -n "$geometry" ] || exit 1
+
+  case "$mode" in
+    gif | mp4) ;;
+    *)
+      notify "Unknown capture format: $mode"
+      exit 1
+      ;;
+  esac
+
+  case "$duration" in
+    "" | 0) duration="" ;;
+    *[!0-9]*)
+      notify "Duration must be seconds"
+      exit 1
+      ;;
+  esac
+
+  backend="$(recorder_backend)"
+
+  if [ "$mode" = "gif" ]; then
+    target="$(filename "$VIDEO_DIR" screen-recording gif)"
+    raw="$TMP_DIR/recording-$$.mp4"
+  else
+    target="$(filename "$VIDEO_DIR" screen-recording mp4)"
+    raw="$target"
+  fi
+
+  if [ "$backend" = "wl-screenrec" ]; then
+    if [ -n "$geometry" ]; then
+      wl-screenrec -g "$geometry" -f "$raw" >/dev/null 2>&1 &
+    else
+      wl-screenrec -f "$raw" >/dev/null 2>&1 &
+    fi
+  else
+    if [ -n "$geometry" ]; then
+      wf-recorder -g "$geometry" -f "$raw" >/dev/null 2>&1 &
+    else
+      wf-recorder -f "$raw" >/dev/null 2>&1 &
+    fi
+  fi
+
+  pid="$!"
+  printf "%s\n" "$pid" > "$RECORD_PID"
+  {
+    printf "mode=%s\n" "$mode"
+    printf "scope=%s\n" "$scope"
+    printf "duration=%s\n" "$duration"
+    printf "started_at=%s\n" "$(date +%s)"
+    printf "raw=%s\n" "$raw"
+    printf "target=%s\n" "$target"
+  } > "$RECORD_META"
+
+  if [ -n "$duration" ]; then
+    (
+      sleep "$duration"
+      if [ -f "$RECORD_PID" ] && [ "$(cat "$RECORD_PID")" = "$pid" ]; then
+        "$0" recordStopQuiet
+      fi
+    ) >/dev/null 2>&1 &
+  fi
+
+  notify "Recording started"
+  printf "%s\n" "$target"
+}
+
+annotate_file() {
+  file="$1"
+
+  if command -v swappy >/dev/null 2>&1; then
+    swappy -f "$file" -o "$file"
+  elif command -v satty >/dev/null 2>&1; then
+    satty --filename "$file" --output-filename "$file" --copy-command wl-copy
+  else
+    notify "Saved screenshot. Install swappy or satty for annotation."
+  fi
+
+  copy_png "$file"
+  notify "Saved and copied: $file"
+  printf "%s\n" "$file"
+}
+
+annotate_region() {
+  file="$(filename "$SCREENSHOT_DIR" annotate png)"
+  capture_region "$file"
+  annotate_file "$file"
+}
+
+annotate_fullscreen() {
+  file="$(filename "$SCREENSHOT_DIR" annotate png)"
+  capture_fullscreen "$file"
+  annotate_file "$file"
+}
+
+annotate_window() {
+  file="$(filename "$SCREENSHOT_DIR" annotate png)"
+  capture_window "$file"
+  annotate_file "$file"
+}
+
+hex_to_formats() {
+  hex="$(printf "%s" "$1" | tr '[:lower:]' '[:upper:]')"
+  hex="${hex#\#}"
+  r=$((0x$(printf "%s" "$hex" | cut -c1-2)))
+  g=$((0x$(printf "%s" "$hex" | cut -c3-4)))
+  b=$((0x$(printf "%s" "$hex" | cut -c5-6)))
+
+  awk -v hex="#$hex" -v r="$r" -v g="$g" -v b="$b" '
+    function min(a,b,c) { m=a; if (b<m) m=b; if (c<m) m=c; return m }
+    function max(a,b,c) { m=a; if (b>m) m=b; if (c>m) m=c; return m }
+    BEGIN {
+      rp = r / 255; gp = g / 255; bp = b / 255
+      mx = max(rp, gp, bp); mn = min(rp, gp, bp); d = mx - mn
+      l = (mx + mn) / 2
+      if (d == 0) {
+        h = 0; s = 0
+      } else {
+        s = d / (1 - (2 * l - 1 < 0 ? -(2 * l - 1) : 2 * l - 1))
+        if (mx == rp) h = 60 * (((gp - bp) / d) % 6)
+        else if (mx == gp) h = 60 * (((bp - rp) / d) + 2)
+        else h = 60 * (((rp - gp) / d) + 4)
+        if (h < 0) h += 360
+      }
+      vs = mx == 0 ? 0 : d / mx
+      printf "%s\nRGB %d, %d, %d\nHSL %.0f, %.0f%%, %.0f%%\nHSV %.0f, %.0f%%, %.0f%%\n",
+        hex, r, g, b, h, s * 100, l * 100, h, vs * 100, mx * 100
+    }
+  '
+}
+
+color_picker() {
+  if command -v hyprpicker >/dev/null 2>&1; then
+    hex="$(hyprpicker -f hex)" || exit 1
+  else
+    need grim
+    need slurp
+    need magick
+    point="$(slurp -p)" || exit 1
+    [ -n "$point" ] || exit 1
+    hex="#$(grim -g "$point" -t png - | magick png:- -format "%[hex:p{0,0}]" info:-)"
+  fi
+
+  result="$(hex_to_formats "$hex")"
+  copy_text "$result"
+  notify "Copied color: $(printf "%s" "$result" | sed -n '1p')"
+  printf "%s\n" "$result"
+}
+
+ocr_region() {
+  need tesseract
+  file="$(temp_png ocr)"
+  capture_region "$file"
+  text="$(tesseract "$file" stdout -l "$OCR_LANG" 2>/dev/null | sed '/^[[:space:]]*$/d')" || exit 1
+  [ -n "$text" ] || {
+    notify "No OCR text found"
+    exit 1
+  }
+  copy_text "$text"
+  notify "Copied OCR text"
+  printf "%s\n" "$text"
+}
+
+qr_region() {
+  need zbarimg
+  file="$(temp_png qr)"
+  capture_region "$file"
+  result="$(zbarimg --quiet --raw "$file" 2>/dev/null | sed '/^[[:space:]]*$/d')" || true
+  [ -n "$result" ] || {
+    notify "No QR or barcode found"
+    exit 1
+  }
+  copy_text "$result"
+  notify "Copied QR/barcode result"
+  printf "%s\n" "$result"
+}
+
+palette_region() {
+  need magick
+  file="$(temp_png palette)"
+  capture_region "$file"
+  palette="$(
+    magick "$file" -resize 160x160\! -colors 8 -unique-colors txt:- |
+      awk 'match($0, /#[0-9A-Fa-f]{6}/) { print toupper(substr($0, RSTART, RLENGTH)) }' |
+      awk '!seen[$0]++' |
+      head -8
+  )"
+  [ -n "$palette" ] || exit 1
+  copy_text "$palette"
+  notify "Copied palette"
+  printf "%s\n" "$palette"
+}
+
+lens_region() {
+  need curl
+  need jq
+  file="$(temp_png lens)"
+  capture_region "$file"
+
+  upload="$(
+    curl -fsS -F "files[]=@$file" https://uguu.se/upload.php |
+      jq -r '.files[0].url // empty'
+  )" || {
+    notify "Image upload failed"
+    exit 1
+  }
+
+  [ -n "$upload" ] || {
+    notify "Image upload returned no URL"
+    exit 1
+  }
+
+  encoded="$(jq -rn --arg url "$upload" '$url|@uri')"
+  open_uri "https://lens.google.com/uploadbyurl?url=$encoded"
+  notify "Opened Google Lens"
+}
+
+measure_region() {
+  need slurp
+  geometry="$(slurp)" || exit 1
+  size="$(printf "%s" "$geometry" | awk '{print $2}')"
+  width="$(printf "%s" "$size" | cut -dx -f1)"
+  height="$(printf "%s" "$size" | cut -dx -f2)"
+  [ -n "$width" ] && [ -n "$height" ] || exit 1
+  result="${width}x${height} px"
+  copy_text "$result"
+  notify "Measured $result"
+  printf "%s\n" "$result"
+}
+
+pin_region() {
+  file="$(filename "$SCREENSHOT_DIR" pin png)"
+  capture_region "$file"
+  printf "%s\n" "$file"
+}
+
+pick_file() {
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --file-selection --title="Pin image"
+  elif command -v kdialog >/dev/null 2>&1; then
+    kdialog --getopenfilename "$HOME"
+  else
+    notify "Install zenity or kdialog for file picking"
+    exit 1
+  fi
+}
+
+recorder_backend() {
+  if command -v wl-screenrec >/dev/null 2>&1; then
+    printf "%s\n" wl-screenrec
+  elif command -v wf-recorder >/dev/null 2>&1; then
+    printf "%s\n" wf-recorder
+  else
+    notify "Install wl-screenrec or wf-recorder"
+    exit 1
+  fi
+}
+
+record_stop() {
+  quiet="${1:-}"
+
+  if [ ! -f "$RECORD_PID" ]; then
+    [ "$quiet" = "quiet" ] || notify "No recording is running"
+    exit 0
+  fi
+
+  pid="$(cat "$RECORD_PID")"
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -INT "$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+    i=0
+    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 50 ]; do
+      sleep 0.1
+      i=$((i + 1))
+    done
+  fi
+
+  # shellcheck disable=SC1090
+  . "$RECORD_META"
+
+  if [ "${mode:-mp4}" = "gif" ]; then
+    if command -v gifski >/dev/null 2>&1; then
+      gifski --fps 12 --quality 80 -o "$target" "$raw" >/dev/null 2>&1 || true
+    fi
+    if [ ! -s "$target" ]; then
+      need ffmpeg
+      ffmpeg -y -i "$raw" -vf "fps=12,scale=iw:-1:flags=lanczos" "$target" >/dev/null 2>&1
+    fi
+    rm -f "$raw"
+  fi
+
+  rm -f "$RECORD_PID" "$RECORD_META"
+  [ "$quiet" = "quiet" ] || notify "Recording saved: $target"
+  printf "%s\n" "$target"
+}
+
+if [ -z "$COMMAND" ]; then
+  usage
+  exit 2
+fi
+
+if [ "$COMMAND" = "status" ]; then
+  record_status
+  exit 0
+fi
+
+mkdir -p "$STATE_DIR" "$TMP_DIR"
+
+case "$COMMAND" in
+  annotate) annotate_region ;;
+  annotateFullscreen) annotate_fullscreen ;;
+  annotateWindow) annotate_window ;;
+  colorPicker) color_picker ;;
+  lens) lens_region ;;
+  measure) measure_region ;;
+  ocr) ocr_region ;;
+  palette) palette_region ;;
+  pin|pin-region) pin_region ;;
+  pinImage|pick-file) pick_file ;;
+  qr) qr_region ;;
+  capture) record_start "$ARG_FORMAT" "$ARG_SCOPE" "$ARG_DURATION" ;;
+  record) record_start gif region ;;
+  recordMp4) record_start mp4 region ;;
+  recordFullscreen) record_start gif fullscreen ;;
+  recordFullscreenMp4) record_start mp4 fullscreen ;;
+  recordStop) record_stop ;;
+  recordStopQuiet) record_stop quiet ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

@@ -1,6 +1,7 @@
 import { Astal, Gtk } from "ags/gtk4"
 import AstalWp from "gi://AstalWp"
-import PanelRevealer, { setupPanelPopover } from "./PanelRevealer"
+import Panel, { PanelSection } from "./Panel"
+import { setupPanelPopover } from "./PanelRevealer"
 
 const wp = AstalWp.get_default()
 const audio = wp.get_audio()
@@ -366,16 +367,18 @@ export default function SoundControl() {
           setupPanelPopover(popover)
         }}
       >
-        <PanelRevealer>
-          <box class="shell-panel sound-menu" orientation={Gtk.Orientation.VERTICAL}>
-            <box class="sound-menu-header" orientation={Gtk.Orientation.HORIZONTAL}>
-              <label class="sound-menu-title" xalign={0} label="Sound" hexpand />
-              <label class="sound-menu-subtitle" label="Devices" />
-            </box>
+        <Panel
+          title="Sound"
+          class="sound-menu"
+          headerEnd={<label class="sound-menu-subtitle" label="Devices" />}
+        >
+          <PanelSection title="Output">
             <AudioRow kind="speaker" icon="audio-speakers-symbolic" title="Output" />
+          </PanelSection>
+          <PanelSection title="Input">
             <AudioRow kind="microphone" icon="audio-input-microphone-symbolic" title="Input" />
-          </box>
-        </PanelRevealer>
+          </PanelSection>
+        </Panel>
       </popover>
     </menubutton>
   )

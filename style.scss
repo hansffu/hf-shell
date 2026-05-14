@@ -8,6 +8,10 @@ $low-color: #7f8490;
 $critical-color: #ff6c6b;
 $critical-bg: #2a2025;
 
+label {
+    font-weight: normal;
+}
+
 .shell-panel {
   background: $bg-color;
   border: 0;
@@ -123,6 +127,34 @@ window.Bar {
     }
   }
 
+  menubutton.screen-toolkit {
+    margin: 0.375rem 0.25rem 0;
+
+    > button {
+      border: 0;
+      border-radius: 0.25rem;
+      min-height: 1.75rem;
+      min-width: 1.75rem;
+      padding: 0.125rem;
+    }
+  }
+
+  button.screen-capture-stop {
+    background: $critical-bg;
+    border: 0;
+    border-radius: 0.25rem;
+    color: $critical-color;
+    margin: 0.375rem 0.25rem 0;
+    min-height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0.125rem;
+
+    &:hover {
+      background: #3b252c;
+      border: 0;
+    }
+  }
+
   button.workspace {
     background: #c678dd;
     border: 0;
@@ -204,12 +236,114 @@ window.Bar {
     padding: 1.25rem;
   }
 
-  .sound-menu-header {
-    margin-bottom: 0.625rem;
+  .panel {
+    padding: 0.75rem;
   }
 
-  .sound-menu-title {
+  .screen-toolkit-menu {
+    min-width: 25rem;
+  }
+
+  .screen-capture-menu {
+    min-width: 18rem;
+  }
+
+  .panel-header {
+    margin-bottom: 0.5rem;
+  }
+
+  .panel-title {
     font-weight: bold;
+    margin-left: 1rem;
+  }
+
+  .panel-section {
+    margin: 0.5rem;
+  }
+
+  .panel-section-title {
+    color: $low-color;
+    font-size: 0.72rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+  }
+
+  .panel-section-content {
+    background: #282C34;
+    border-radius: 0.375rem;
+    box-shadow:
+      inset 0 0 0.45rem rgba(0, 0, 0, 0.38),
+      inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+    padding: 1rem;
+  }
+
+  .screen-toolkit-grid {
+    margin: -0.1875rem;
+  }
+
+  button.screen-toolkit-tool {
+    margin: 0.1875rem;
+    min-height: 3.25rem;
+    min-width: 5rem;
+    padding: 0.25rem 0.375rem;
+
+    image {
+      margin-bottom: 0;
+    }
+
+    label.screen-toolkit-tool-label {
+      color: $low-color;
+      font-size: 0.66rem;
+      font-weight: 300;
+      margin-top: 0.125rem;
+    }
+  }
+
+  menubutton.screen-capture {
+    > button {
+      border-radius: 0.375rem;
+      margin: 0.125rem 0;
+      padding: 0.375rem 0.5rem;
+
+      image {
+        margin-right: 0.375rem;
+      }
+    }
+  }
+
+  .screen-toolkit-picker {
+    margin-top: 0.5rem;
+  }
+
+  .screen-toolkit-choice-row {
+    margin: -0.125rem;
+  }
+
+  button.screen-toolkit-choice {
+    margin: 0.125rem;
+    min-width: 4.25rem;
+    padding: 0.3125rem 0.5rem;
+
+    &.active {
+      background: $active-color;
+      color: $base-color;
+    }
+  }
+
+  button.screen-capture-start {
+    background: $active-color;
+    color: $base-color;
+    margin-top: 0.875rem;
+    padding: 0.4375rem 0.625rem;
+
+    image {
+      margin-right: 0.375rem;
+    }
+
+    &:hover {
+      background: #7cc7ff;
+      color: $base-color;
+    }
   }
 
   .sound-menu-subtitle,
@@ -468,5 +602,43 @@ window.NotificationCenter {
     min-height: 1.375rem;
     min-width: 1.375rem;
     padding: 0;
+  }
+}
+
+window.ScreenToolkitPin {
+  background: transparent;
+  color: $fg-color;
+
+  .screen-toolkit-pin-frame {
+    background: $bg-color;
+    border: 1px solid $border-color;
+  }
+
+  .screen-toolkit-pin-header {
+    background: $base-color;
+    padding: 0.375rem 0.5rem;
+  }
+
+  .screen-toolkit-pin-title {
+    color: $low-color;
+    font-size: 0.72rem;
+  }
+
+  button.screen-toolkit-pin-close {
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    color: $fg-color;
+    min-height: 1.375rem;
+    min-width: 1.375rem;
+    padding: 0;
+
+    &:hover {
+      background: $hover-color;
+    }
+  }
+
+  picture {
+    background: #0f1117;
   }
 }
