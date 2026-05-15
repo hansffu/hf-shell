@@ -56,9 +56,17 @@
       zenity
     ];
 
+    bluetoothPackages = with pkgs; [
+      bluez
+      blueman
+      pulseaudio
+      util-linux
+    ];
+
     extraPackages =
       astalPackages
       ++ screenToolkitPackages
+      ++ bluetoothPackages
       ++ [
         pkgs.libadwaita
         pkgs.libsoup_3
@@ -79,7 +87,7 @@
 
         preFixup = ''
           gappsWrapperArgs+=(
-            --prefix PATH : "${pkgs.lib.makeBinPath screenToolkitPackages}"
+            --prefix PATH : "${pkgs.lib.makeBinPath (screenToolkitPackages ++ bluetoothPackages)}"
           )
         '';
 

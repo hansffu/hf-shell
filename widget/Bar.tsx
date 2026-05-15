@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
 import { setupEscapeToClosePanels } from "../service/Panels"
+import BluetoothControl from "./BluetoothControl"
 import NotificationButton from "./NotificationButton"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
 import SoundControl from "./SoundControl"
@@ -39,6 +40,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
         <box $type="end" orientation={Gtk.Orientation.VERTICAL}>
           <ScreenToolkit gdkmonitor={gdkmonitor} />
           <ScreenCaptureStopButton />
+          <BluetoothControl />
           <SoundControl />
         </box>
       </centerbox>

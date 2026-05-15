@@ -224,6 +224,29 @@ window.Bar {
     }
   }
 
+  menubutton.bluetooth-control {
+    margin: 0.375rem 0.25rem 0;
+
+    > button {
+      border: 0;
+      border-radius: 0.25rem;
+      min-height: 2.375rem;
+      min-width: 1.75rem;
+      padding: 0.125rem;
+    }
+  }
+
+  .bluetooth-control-content {
+    margin: 0;
+  }
+
+  .bluetooth-control-count {
+    color: $low-color;
+    font-size: 0.56rem;
+    font-weight: bold;
+    margin-top: -0.125rem;
+  }
+
   .sound-control-content {
     margin: 0;
   }
@@ -236,6 +259,11 @@ window.Bar {
   }
 
   .sound-menu {
+    min-width: 25rem;
+    padding: 1.25rem;
+  }
+
+  .bluetooth-menu {
     min-width: 25rem;
     padding: 1.25rem;
   }
@@ -351,10 +379,95 @@ window.Bar {
   }
 
   .sound-menu-subtitle,
+  .bluetooth-menu-subtitle,
   .audio-row-device,
-  .audio-row-value {
+  .audio-row-value,
+  .bluetooth-count,
+  .bluetooth-device-status,
+  .bluetooth-profile-title {
     color: $low-color;
     font-size: 0.72rem;
+  }
+
+  .bluetooth-toolbar {
+    margin: 0.25rem 0.5rem 0.5rem;
+  }
+
+  button.bluetooth-manager {
+    border: 0;
+    min-height: 1.75rem;
+    min-width: 1.75rem;
+    padding: 0;
+  }
+
+  switch.bluetooth-power {
+    margin-right: 0.375rem;
+  }
+
+  .bluetooth-empty {
+    color: $low-color;
+    margin: 1rem 0;
+
+    label {
+      margin-top: 0.5rem;
+    }
+  }
+
+  .bluetooth-device-row {
+    background: $base-color;
+    border: 1px solid $border-color;
+    border-radius: 0.375rem;
+    margin-top: 0.625rem;
+    padding: 0.75rem;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  .bluetooth-device-header {
+    margin: 0;
+
+    > image {
+      margin-right: 0.625rem;
+    }
+  }
+
+  .bluetooth-device-labels {
+    min-width: 0;
+  }
+
+  .bluetooth-device-name {
+    font-weight: bold;
+  }
+
+  button.bluetooth-connect {
+    border: 1px solid $border-color;
+    min-height: 1.875rem;
+    min-width: 6.75rem;
+    padding: 0.25rem 0.5rem;
+
+    image {
+      margin-right: 0.375rem;
+    }
+
+    &.active {
+      background: $critical-bg;
+      color: $critical-color;
+    }
+  }
+
+  .bluetooth-profile-row {
+    margin: 0.625rem 0 0 1.875rem;
+  }
+
+  .bluetooth-profile-title {
+    margin-right: 0.5rem;
+    min-width: 6.5rem;
+  }
+
+  dropdown.bluetooth-profile-select {
+    min-width: 13rem;
   }
 
   .audio-row {
