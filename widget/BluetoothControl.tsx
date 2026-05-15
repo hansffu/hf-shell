@@ -4,6 +4,8 @@ import {
   type BluetoothAudioCard,
   type BluetoothDevice,
   type BluetoothProfile,
+  bluetoothDeviceName,
+  connectBluetoothStateSignals,
   connectBluetoothDevice,
   disconnectBluetoothDevice,
   getBluetoothAudioCard,
@@ -66,6 +68,44 @@ function refreshSoon(refresh: () => void) {
   })
 }
 
+function addClasses(widget: Gtk.Widget, classes: string) {
+  for (const className of classes.split(" ").filter(Boolean)) widget.add_css_class(className)
+}
+
+function createImage(iconName: string, pixelSize: number) {
+  const image = Gtk.Image.new_from_icon_name(iconName)
+
+  image.set_pixel_size(pixelSize)
+  image.use_fallback = true
+
+  return image
+}
+
+function createLabel(label: string, className = "", xalign: number | null = null) {
+  const widget = Gtk.Label.new(label)
+
+  if (className) addClasses(widget, className)
+  if (xalign !== null) widget.set_xalign(xalign)
+
+  return widget
+}
+
+function createEmptyState(state: ReturnType<typeof getBluetoothState>) {
+  const box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
+  const iconName = state.adapterAvailable ? "bluetooth-disabled-symbolic" : "dialog-warning-symbolic"
+  const label = state.adapterAvailable
+    ? state.powered
+      ? "No paired devices"
+      : "Bluetooth is powered off"
+    : "Bluetooth is not available"
+
+  addClasses(box, "bluetooth-empty")
+  box.append(createImage(iconName, 28))
+  box.append(createLabel(label))
+
+  return box
+}
+
 function setupBluetoothButton(button: Gtk.MenuButton, controls: BluetoothButtonControls) {
   const refresh = () => {
     const state = getBluetoothState()
@@ -85,10 +125,7 @@ function setupBluetoothButton(button: Gtk.MenuButton, controls: BluetoothButtonC
   }
 
   button.connect("map", refresh)
-  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
-    refresh()
-    return GLib.SOURCE_CONTINUE
-  })
+  connectBluetoothStateSignals(refresh)
   refresh()
 }
 
@@ -111,47 +148,18 @@ function setupBluetoothList(controls: BluetoothListControls) {
     clearBox(controls.list)
 
     if (!state.adapterAvailable || !state.powered || state.devices.length === 0) {
-      controls.list.append(
-        <box class="bluetooth-empty" orientation={Gtk.Orientation.VERTICAL}>
-          <image
-            iconName={
-              state.adapterAvailable ? "bluetooth-disabled-symbolic" : "dialog-warning-symbolic"
-            }
-            pixelSize={28}
-            useFallback
-          />
-          <label
-            label={
-              state.adapterAvailable
-                ? state.powered
-                  ? "No paired devices"
-                  : "Bluetooth is powered off"
-                : "Bluetooth is not available"
-            }
-          />
-        </box>,
-      )
+      controls.list.append(createEmptyState(state))
       return
     }
 
     for (const device of state.devices) {
-      controls.list.append(
-        <BluetoothDeviceRow
-          device={device}
-          onRefresh={() => {
-            refresh()
-          }}
-        />,
-      )
+      controls.list.append(createBluetoothDeviceRow(device, refresh))
     }
   }
 
-  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
-    refresh()
-    return GLib.SOURCE_CONTINUE
-  })
+  connectBluetoothStateSignals(refresh)
 
-  controls.powerSwitch.connect("notify::active", (toggle) => {
+  controls.powerSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
     const state = getBluetoothState()
 
     if (!state.adapterAvailable || toggle.active === state.powered) return
@@ -183,7 +191,7 @@ function setupProfileDropdown(
   dropdown.set_sensitive(Boolean(card && profiles.length > 0))
   syncing = false
 
-  dropdown.connect("notify::selected", (select) => {
+  dropdown.connect("notify::selected", (select: Gtk.DropDown) => {
     if (syncing || !card) return
 
     const profile = profiles[select.selected]
@@ -211,62 +219,62 @@ function BluetoothProfileDropdown({
   return dropdown
 }
 
-function BluetoothDeviceRow({
-  device,
-  onRefresh,
-}: {
-  device: BluetoothDevice
-  onRefresh: () => void
-}) {
-  const card = device.connected ? getBluetoothAudioCard(device.mac) : null
+function createBluetoothDeviceRow(device: BluetoothDevice, onRefresh: () => void) {
+  const card = device.connected ? getBluetoothAudioCard(device.address) : null
+  const status = device.connecting
+    ? "Connecting"
+    : device.connected
+      ? device.battery_percentage >= 0
+        ? `Connected, ${device.battery_percentage}% battery`
+        : "Connected"
+      : "Disconnected"
+  const row = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
+  const header = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
+  const labels = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
+  const button = Gtk.Button.new()
+  const buttonContent = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
 
-  return (
-    <box class="bluetooth-device-row" orientation={Gtk.Orientation.VERTICAL}>
-      <box class="bluetooth-device-header" orientation={Gtk.Orientation.HORIZONTAL}>
-        <image
-          iconName={device.connected ? "bluetooth-active-symbolic" : "bluetooth-symbolic"}
-          pixelSize={18}
-          useFallback
-        />
-        <box class="bluetooth-device-labels" orientation={Gtk.Orientation.VERTICAL} hexpand>
-          <label class="bluetooth-device-name" xalign={0} ellipsize={3} label={device.name} />
-          <label
-            class="bluetooth-device-status"
-            xalign={0}
-            label={device.connected ? "Connected" : "Disconnected"}
-          />
-        </box>
-        <button
-          class={device.connected ? "bluetooth-connect active" : "bluetooth-connect"}
-          tooltipText={device.connected ? "Disconnect" : "Connect"}
-          onClicked={() => {
-            if (device.connected) {
-              disconnectBluetoothDevice(device)
-            } else {
-              connectBluetoothDevice(device)
-            }
+  addClasses(row, "bluetooth-device-row")
+  addClasses(header, "bluetooth-device-header")
+  addClasses(labels, "bluetooth-device-labels")
+  labels.set_hexpand(true)
 
-            refreshSoon(onRefresh)
-          }}
-        >
-          <box orientation={Gtk.Orientation.HORIZONTAL}>
-            <image
-              iconName={device.connected ? "bluetooth-disabled-symbolic" : "bluetooth-active-symbolic"}
-              pixelSize={16}
-              useFallback
-            />
-            <label label={device.connected ? "Disconnect" : "Connect"} />
-          </box>
-        </button>
-      </box>
-      {device.connected && (
-        <box class="bluetooth-profile-row" orientation={Gtk.Orientation.HORIZONTAL}>
-          <label class="bluetooth-profile-title" xalign={0} label="Headset profile" />
-          <BluetoothProfileDropdown card={card} onRefresh={onRefresh} />
-        </box>
-      )}
-    </box>
+  header.append(createImage(device.connected ? "bluetooth-active-symbolic" : "bluetooth-symbolic", 18))
+  labels.append(createLabel(bluetoothDeviceName(device), "bluetooth-device-name", 0))
+  labels.append(createLabel(status, "bluetooth-device-status", 0))
+  header.append(labels)
+
+  addClasses(button, device.connected ? "bluetooth-connect active" : "bluetooth-connect")
+  button.set_tooltip_text(device.connected ? "Disconnect" : "Connect")
+  button.set_sensitive(!device.connecting)
+  button.connect("clicked", () => {
+    if (device.connected) {
+      disconnectBluetoothDevice(device)
+    } else {
+      connectBluetoothDevice(device)
+    }
+
+    refreshSoon(onRefresh)
+  })
+
+  buttonContent.append(
+    createImage(device.connected ? "bluetooth-disabled-symbolic" : "bluetooth-active-symbolic", 16),
   )
+  buttonContent.append(createLabel(device.connected ? "Disconnect" : "Connect"))
+  button.set_child(buttonContent)
+  header.append(button)
+  row.append(header)
+
+  if (device.connected) {
+    const profileRow = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
+
+    addClasses(profileRow, "bluetooth-profile-row")
+    profileRow.append(createLabel("Headset profile", "bluetooth-profile-title", 0))
+    profileRow.append(BluetoothProfileDropdown({ card, onRefresh }))
+    row.append(profileRow)
+  }
+
+  return row
 }
 
 export default function BluetoothControl() {

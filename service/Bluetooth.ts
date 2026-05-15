@@ -1,12 +1,9 @@
-import Gio from "gi://Gio"
+import AstalBluetooth from "gi://AstalBluetooth"
 import GLib from "gi://GLib"
 
-export type BluetoothDevice = {
-  connected: boolean
-  mac: string
-  name: string
-  path?: string
-}
+const bluetooth = AstalBluetooth.get_default()
+
+export type BluetoothDevice = AstalBluetooth.Device
 
 export type BluetoothProfile = {
   active: boolean
@@ -33,13 +30,6 @@ type PactlCard = {
   profiles?: Record<string, { available?: boolean | string; description?: string }>
   properties?: Record<string, string>
 }
-
-type BluezAdapter = {
-  path: string
-  powered: boolean
-}
-
-type BluezObjects = Record<string, Record<string, Record<string, unknown>>>
 
 function bytesToString(bytes: Uint8Array) {
   return String.fromCharCode(...bytes)
@@ -83,222 +73,59 @@ function cardAddress(mac: string) {
   return normalizeMac(mac).replaceAll(":", "_")
 }
 
-function parseYesNo(output: string, field: string) {
-  const match = output.match(new RegExp(`^\\s*${field}:\\s+(yes|no)\\s*$`, "im"))
-
-  return match?.[1] === "yes"
-}
-
-function parseName(output: string, fallback: string) {
-  const alias = output.match(/^\s*Alias:\s+(.+)$/im)?.[1]
-  const name = output.match(/^\s*Name:\s+(.+)$/im)?.[1]
-
-  return alias || name || fallback
-}
-
-function parseDevices(output: string) {
-  return output
-    .split("\n")
-    .map((line) => line.match(/^Device\s+([0-9A-F:]{17})\s+(.+)$/i))
-    .filter((match): match is RegExpMatchArray => Boolean(match))
-    .map((match) => ({
-      mac: normalizeMac(match[1]),
-      name: match[2],
-    }))
-}
-
-function unpackVariant(value: unknown) {
-  if (value && typeof value === "object" && "deepUnpack" in value) {
-    return (value as GLib.Variant).deepUnpack()
-  }
-
-  return value
-}
-
-function unpackString(value: unknown) {
-  const unpacked = unpackVariant(value)
-
-  return typeof unpacked === "string" ? unpacked : null
-}
-
-function unpackBoolean(value: unknown) {
-  return unpackVariant(value) === true
-}
-
-function getBluezObjects() {
-  try {
-    const result = Gio.DBus.system.call_sync(
-      "org.bluez",
-      "/",
-      "org.freedesktop.DBus.ObjectManager",
-      "GetManagedObjects",
-      null,
-      new GLib.VariantType("(a{oa{sa{sv}}})"),
-      Gio.DBusCallFlags.NONE,
-      500,
-      null,
-    )
-
-    return ((result?.deepUnpack() ?? [{}]) as [BluezObjects])[0]
-  } catch (error) {
-    void error
-    return null
-  }
-}
-
-function getBluezAdapter(objects = getBluezObjects()): BluezAdapter | null {
-  if (!objects) return null
-
-  for (const [path, interfaces] of Object.entries(objects)) {
-    const adapter = interfaces["org.bluez.Adapter1"]
-
-    if (!adapter) continue
-
-    return {
-      path,
-      powered: unpackBoolean(adapter.Powered),
-    }
-  }
-
-  return null
-}
-
-function getBluezDevices(objects = getBluezObjects()) {
-  if (!objects) return []
-
-  return Object.entries(objects)
-    .map(([path, interfaces]): BluetoothDevice | null => {
-      const device = interfaces["org.bluez.Device1"]
-
-      if (!device || !unpackBoolean(device.Paired)) return null
-
-      const mac = unpackString(device.Address)
-
-      if (!mac) return null
-
-      return {
-        connected: unpackBoolean(device.Connected),
-        mac: normalizeMac(mac),
-        name: unpackString(device.Alias) || unpackString(device.Name) || normalizeMac(mac),
-        path,
-      }
-    })
-    .filter((device): device is BluetoothDevice => Boolean(device))
-    .sort((left, right) => left.name.localeCompare(right.name))
-}
-
-function getBluetoothctlDevices() {
-  return parseDevices(runSync(["bluetoothctl", "devices", "Paired"]) ?? "")
-    .map((device) => {
-      const info = runSync(["bluetoothctl", "info", device.mac]) ?? ""
-
-      return {
-        ...device,
-        connected: parseYesNo(info, "Connected"),
-        name: parseName(info, device.name),
-      }
-    })
-    .sort((left, right) => left.name.localeCompare(right.name))
-}
-
 export function getBluetoothState(): BluetoothState {
-  const bluezObjects = getBluezObjects()
-  const adapter = getBluezAdapter(bluezObjects)
-  const show = adapter ? null : runSync(["bluetoothctl", "show"])
-
-  if (!adapter && !show) {
-    return {
-      adapterAvailable: false,
-      devices: [],
-      powered: false,
-    }
-  }
-
-  const bluezDevices = getBluezDevices(bluezObjects)
-  const devices = bluezDevices.length > 0 ? bluezDevices : getBluetoothctlDevices()
+  const devices = [...(bluetooth.devices ?? [])]
+    .filter((device) => device.paired)
+    .sort((left, right) => bluetoothDeviceName(left).localeCompare(bluetoothDeviceName(right)))
 
   return {
-    adapterAvailable: true,
+    adapterAvailable: Boolean(bluetooth.adapter),
     devices,
-    powered: adapter?.powered ?? parseYesNo(show ?? "", "Powered"),
+    powered: bluetooth.is_powered,
   }
 }
 
 export function connectBluetoothDevice(device: BluetoothDevice) {
-  if (device.path) {
-    try {
-      Gio.DBus.system.call_sync(
-        "org.bluez",
-        device.path,
-        "org.bluez.Device1",
-        "Connect",
-        null,
-        null,
-        Gio.DBusCallFlags.NONE,
-        10000,
-        null,
-      )
-      return
-    } catch (error) {
-      void error
-    }
-  }
-
-  runAsync(["bluetoothctl", "connect", device.mac])
+  void device.connect_device().catch(() => undefined)
 }
 
 export function disconnectBluetoothDevice(device: BluetoothDevice) {
-  if (device.path) {
-    try {
-      Gio.DBus.system.call_sync(
-        "org.bluez",
-        device.path,
-        "org.bluez.Device1",
-        "Disconnect",
-        null,
-        null,
-        Gio.DBusCallFlags.NONE,
-        5000,
-        null,
-      )
-      return
-    } catch (error) {
-      void error
-    }
-  }
-
-  runAsync(["bluetoothctl", "disconnect", device.mac])
+  void device.disconnect_device().catch(() => undefined)
 }
 
 export function setBluetoothPowered(powered: boolean) {
-  if (powered) runSync(["rfkill", "unblock", "bluetooth"])
+  const adapter = bluetooth.adapter
 
-  const adapter = getBluezAdapter()
+  if (adapter && adapter.powered !== powered) adapter.powered = powered
+}
 
-  if (adapter) {
-    try {
-      Gio.DBus.system.call_sync(
-        "org.bluez",
-        adapter.path,
-        "org.freedesktop.DBus.Properties",
-        "Set",
-        new GLib.Variant("(ssv)", [
-          "org.bluez.Adapter1",
-          "Powered",
-          new GLib.Variant("b", powered),
-        ]),
-        null,
-        Gio.DBusCallFlags.NONE,
-        1000,
-        null,
-      )
-      return
-    } catch (error) {
-      void error
-    }
-  }
+export function connectBluetoothStateSignals(refresh: () => void) {
+  bluetooth.connect("notify::adapter", refresh)
+  bluetooth.connect("notify::adapters", refresh)
+  bluetooth.connect("notify::devices", refresh)
+  bluetooth.connect("notify::is-powered", refresh)
+  bluetooth.connect("notify::is-connected", refresh)
+  bluetooth.connect("adapter-added", refresh)
+  bluetooth.connect("adapter-removed", refresh)
+  bluetooth.connect("device-added", (_service, device) => {
+    connectBluetoothDeviceSignals(device, refresh)
+    refresh()
+  })
+  bluetooth.connect("device-removed", refresh)
 
-  runAsync(["bluetoothctl", "power", powered ? "on" : "off"])
+  for (const device of bluetooth.devices ?? []) connectBluetoothDeviceSignals(device, refresh)
+}
+
+export function connectBluetoothDeviceSignals(device: BluetoothDevice, refresh: () => void) {
+  device.connect("notify::alias", refresh)
+  device.connect("notify::connected", refresh)
+  device.connect("notify::connecting", refresh)
+  device.connect("notify::paired", refresh)
+  device.connect("notify::battery-percentage", refresh)
+}
+
+export function bluetoothDeviceName(device: BluetoothDevice) {
+  return device.alias || device.name || normalizeMac(device.address)
 }
 
 function activeProfileName(card: PactlCard) {
