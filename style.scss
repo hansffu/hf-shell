@@ -236,6 +236,62 @@ window.Bar {
     }
   }
 
+  menubutton.system-monitor {
+    margin: 0.375rem 0.25rem 0;
+
+    > button {
+      border: 0;
+      border-radius: 0.25rem;
+      min-height: 6.5625rem;
+      min-width: 1.75rem;
+      padding: 0.125rem;
+    }
+  }
+
+  .system-monitor-content {
+    margin: 0;
+  }
+
+  .system-monitor-compact-row {
+    color: $fg-color;
+    margin: 0;
+    min-height: 2rem;
+    min-width: 1.75rem;
+    padding: 0;
+
+    &.memory,
+    &.temp {
+      margin-top: 0.1875rem;
+    }
+
+    &.critical {
+      color: $critical-color;
+    }
+
+    image {
+      margin: 0;
+    }
+  }
+
+  .system-monitor-temp-icon {
+    margin: 0;
+  }
+
+  .system-monitor-cpu,
+  .system-monitor-memory,
+  .system-monitor-temp {
+    color: $low-color;
+    font-size: 0.56rem;
+    font-weight: bold;
+    margin-top: -0.0625rem;
+  }
+
+  .system-monitor-compact-row.critical .system-monitor-cpu,
+  .system-monitor-compact-row.critical .system-monitor-memory,
+  .system-monitor-compact-row.critical .system-monitor-temp {
+    color: $critical-color;
+  }
+
   .bluetooth-control-content {
     margin: 0;
   }
@@ -380,6 +436,7 @@ window.Bar {
 
   .sound-menu-subtitle,
   .bluetooth-menu-subtitle,
+  .system-monitor-subtitle,
   .audio-row-device,
   .audio-row-value,
   .bluetooth-count,
@@ -387,6 +444,36 @@ window.Bar {
   .bluetooth-profile-title {
     color: $low-color;
     font-size: 0.72rem;
+  }
+
+  .system-monitor-menu {
+    min-width: 25rem;
+    padding: 1.25rem;
+  }
+
+  .system-monitor-section {
+    margin: -0.125rem 0 0;
+  }
+
+  .system-monitor-metric {
+    margin: 0.125rem 0;
+  }
+
+  .system-monitor-metric-label {
+    color: $low-color;
+    font-size: 0.72rem;
+  }
+
+  .system-monitor-value {
+    font-weight: bold;
+    margin-left: 0.75rem;
+  }
+
+  .system-monitor-graph {
+    background: $base-color;
+    border: 1px solid $border-color;
+    border-radius: 0.375rem;
+    margin-top: 0.625rem;
   }
 
   .bluetooth-toolbar {

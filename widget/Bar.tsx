@@ -5,6 +5,7 @@ import BluetoothControl from "./BluetoothControl"
 import NotificationButton from "./NotificationButton"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
 import SoundControl from "./SoundControl"
+import SystemMonitor from "./SystemMonitor"
 import SystemTray from "./SystemTray"
 import Time from "./Time"
 import WorkspaceApps from "./WorkspaceApps"
@@ -40,6 +41,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
         <box $type="end" orientation={Gtk.Orientation.VERTICAL}>
           <ScreenToolkit gdkmonitor={gdkmonitor} />
           <ScreenCaptureStopButton />
+          <SystemMonitor />
           <BluetoothControl />
           <SoundControl />
         </box>
