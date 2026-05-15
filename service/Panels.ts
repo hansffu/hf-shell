@@ -1,10 +1,83 @@
-import { Gdk, Gtk } from "ags/gtk4"
+import { Astal, Gdk, Gtk } from "ags/gtk4"
+import AstalNiri from "gi://AstalNiri"
+import GLib from "gi://GLib"
 
 const popovers = new Set<Gtk.Popover>()
+const visiblePopovers = new Set<Gtk.Popover>()
+const niri = AstalNiri.get_default()
+type KeymodeHost = Gtk.Root & { set_keymode?: (mode: Astal.Keymode) => void }
+
+let keymodeHosts = new Set<KeymodeHost>()
+let lastFocusedWindowId: number | null = niri.focused_window?.id ?? null
+
+function rememberFocusedWindow(window = niri.focused_window) {
+  if (window) lastFocusedWindowId = window.id
+}
+
+niri.connect("notify::focused-window", () => rememberFocusedWindow())
+niri.connect("window-focus-changed", (_niri, id: number) => {
+  if (id > 0) lastFocusedWindowId = id
+})
+
+function popoverKeymodeHost(popover: Gtk.Popover) {
+  return popover.get_root() as KeymodeHost | null
+}
+
+function refreshPanelHostKeymodes() {
+  const activeHosts = new Set<KeymodeHost>()
+
+  for (const popover of visiblePopovers) {
+    const host = popoverKeymodeHost(popover)
+
+    if (host?.set_keymode) activeHosts.add(host)
+  }
+
+  for (const host of keymodeHosts) {
+    if (!activeHosts.has(host)) host.set_keymode?.(Astal.Keymode.NONE)
+  }
+
+  for (const host of activeHosts) host.set_keymode?.(Astal.Keymode.ON_DEMAND)
+
+  keymodeHosts = activeHosts
+}
+
+function restoreNiriFocus() {
+  const windowId = lastFocusedWindowId
+
+  if (windowId === null) return
+
+  GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    const window = niri.get_window(windowId)
+
+    window?.focus(windowId)
+    return GLib.SOURCE_REMOVE
+  })
+}
+
+function syncPopoverVisibility(popover: Gtk.Popover) {
+  if (popover.visible) {
+    visiblePopovers.add(popover)
+    refreshPanelHostKeymodes()
+    return
+  }
+
+  visiblePopovers.delete(popover)
+  refreshPanelHostKeymodes()
+
+  if (visiblePopovers.size === 0) {
+    restoreNiriFocus()
+  }
+}
 
 export function registerPanelPopover(popover: Gtk.Popover) {
   popovers.add(popover)
-  popover.connect("destroy", () => popovers.delete(popover))
+  popover.connect("notify::visible", () => syncPopoverVisibility(popover))
+  popover.connect("closed", () => syncPopoverVisibility(popover))
+  popover.connect("destroy", () => {
+    popovers.delete(popover)
+    visiblePopovers.delete(popover)
+    refreshPanelHostKeymodes()
+  })
 }
 
 export function closePanelPopovers() {
@@ -13,9 +86,15 @@ export function closePanelPopovers() {
 
 export function closePanels() {
   closePanelPopovers()
+
+  if (visiblePopovers.size === 0) restoreNiriFocus()
 }
 
 export function setupEscapeToClosePanels(window: Gtk.Window) {
+  const hostWindow = window as Gtk.Window & { set_keymode?: (mode: Astal.Keymode) => void }
+
+  hostWindow.set_keymode?.(Astal.Keymode.NONE)
+
   const controller = Gtk.EventControllerKey.new()
 
   controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
