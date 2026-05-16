@@ -16,6 +16,7 @@ import {
 } from "../service/Bluetooth"
 import Panel, { PanelSection } from "./Panel"
 import { setupPanelPopover } from "./PanelRevealer"
+import Select, { type SelectControl } from "./Select"
 
 type BluetoothButtonControls = {
   icon: Gtk.Image
@@ -172,7 +173,7 @@ function setupBluetoothList(controls: BluetoothListControls) {
 }
 
 function setupProfileDropdown(
-  dropdown: Gtk.DropDown,
+  dropdown: SelectControl,
   card: BluetoothAudioCard | null,
   onRefresh: () => void,
 ) {
@@ -210,13 +211,15 @@ function BluetoothProfileDropdown({
   card: BluetoothAudioCard | null
   onRefresh: () => void
 }) {
-  const dropdown = Gtk.DropDown.new(null, null)
-
-  dropdown.add_css_class("bluetooth-profile-select")
-  dropdown.hexpand = true
-  setupProfileDropdown(dropdown, card, onRefresh)
-
-  return dropdown
+  return (
+    <Select
+      class="bluetooth-profile-select"
+      hexpand
+      onReady={(dropdown) => {
+        setupProfileDropdown(dropdown, card, onRefresh)
+      }}
+    />
+  )
 }
 
 function createBluetoothDeviceRow(device: BluetoothDevice, onRefresh: () => void) {

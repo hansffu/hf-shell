@@ -2,6 +2,7 @@ import { Astal, Gtk } from "ags/gtk4"
 import AstalWp from "gi://AstalWp"
 import Panel, { PanelSection } from "./Panel"
 import { setupPanelPopover } from "./PanelRevealer"
+import Select, { type SelectControl } from "./Select"
 
 const wp = AstalWp.get_default()
 const audio = wp.get_audio()
@@ -10,7 +11,7 @@ type EndpointKind = "speaker" | "microphone"
 
 type AudioRowControls = {
   deviceLabel: Gtk.Label
-  dropdown: Gtk.DropDown
+  dropdown: SelectControl
   icon: Gtk.Image
   muteButton: Gtk.Button
   muteIcon: Gtk.Image
@@ -77,7 +78,7 @@ function connectEndpointSignals(kind: EndpointKind, sync: () => void) {
   }
 }
 
-function setupDeviceDropdown(dropdown: Gtk.DropDown, kind: EndpointKind) {
+function setupDeviceDropdown(dropdown: SelectControl, kind: EndpointKind) {
   let endpoints: AstalWp.Endpoint[] = []
   let syncing = false
 
@@ -203,14 +204,8 @@ function setupAudioRow(kind: EndpointKind, icon: string, controls: AudioRowContr
   bindEndpoint()
 }
 
-function DeviceDropdown({ onReady }: { onReady: (dropdown: Gtk.DropDown) => void }) {
-  const dropdown = Gtk.DropDown.new(null, null)
-
-  dropdown.add_css_class("audio-device-select")
-  dropdown.hexpand = true
-  onReady(dropdown)
-
-  return dropdown
+function DeviceDropdown({ onReady }: { onReady: (dropdown: SelectControl) => void }) {
+  return <Select class="audio-device-select" hexpand onReady={onReady} />
 }
 
 function AudioRow({
