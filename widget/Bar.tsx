@@ -4,6 +4,7 @@ import { setupEscapeToClosePanels } from "../service/Panels"
 import BluetoothControl from "./BluetoothControl"
 import NotificationButton from "./NotificationButton"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
+import SlackUnread from "./SlackUnread"
 import SoundControl from "./SoundControl"
 import SystemMonitor from "./SystemMonitor"
 import SystemTray from "./SystemTray"
@@ -32,6 +33,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
         <box $type="start" orientation={Gtk.Orientation.VERTICAL}>
           <Time />
           <NotificationButton />
+          <SlackUnread />
           <WorkspaceApps />
           <SystemTray />
         </box>
