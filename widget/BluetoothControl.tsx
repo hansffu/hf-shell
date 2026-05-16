@@ -49,6 +49,17 @@ function profileLabel(profile: BluetoothProfile) {
   return `${prefix}: ${profile.description}${availability}`
 }
 
+function uniqueProfileLabels(profiles: BluetoothProfile[]) {
+  const labels = profiles.map(profileLabel)
+  const counts = new Map<string, number>()
+
+  for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1)
+
+  return labels.map((label, index) =>
+    counts.get(label) === 1 ? label : `${label} (${profiles[index].name})`,
+  )
+}
+
 function clearBox(box: Gtk.Box) {
   let child = box.get_first_child()
 
@@ -184,7 +195,7 @@ function setupProfileDropdown(
   dropdown.set_model(
     Gtk.StringList.new(
       profiles.length > 0
-        ? profiles.map(profileLabel)
+        ? uniqueProfileLabels(profiles)
         : [card ? "No headset profiles" : "No audio profile"],
     ),
   )

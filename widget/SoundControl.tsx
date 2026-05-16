@@ -32,6 +32,17 @@ function endpointLabel(endpoint: AstalWp.Endpoint) {
   return endpoint.description || endpoint.name || "Audio device"
 }
 
+function uniqueEndpointLabels(endpoints: AstalWp.Endpoint[]) {
+  const labels = endpoints.map(endpointLabel)
+  const counts = new Map<string, number>()
+
+  for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1)
+
+  return labels.map((label, index) =>
+    counts.get(label) === 1 ? label : `${label} (${endpoints[index].name})`,
+  )
+}
+
 function compareEndpoints(left: AstalWp.Endpoint, right: AstalWp.Endpoint) {
   return endpointLabel(left).localeCompare(endpointLabel(right))
 }
@@ -97,7 +108,7 @@ function setupDeviceDropdown(dropdown: SelectControl, kind: EndpointKind) {
     syncing = true
     dropdown.set_model(
       Gtk.StringList.new(endpoints.length > 0
-        ? endpoints.map(endpointLabel)
+        ? uniqueEndpointLabels(endpoints)
         : ["No devices"]),
     )
     dropdown.set_sensitive(endpoints.length > 0)
