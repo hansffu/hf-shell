@@ -1,5 +1,6 @@
 import { Astal, Gtk } from "ags/gtk4"
 import AstalWp from "gi://AstalWp"
+import GLib from "gi://GLib"
 import Panel, { PanelSection } from "./Panel"
 import { setupPanelPopover } from "./PanelRevealer"
 import Select, { type SelectControl } from "./Select"
@@ -15,6 +16,8 @@ type AudioRowControls = {
   icon: Gtk.Image
   muteButton: Gtk.Button
   muteIcon: Gtk.Image
+  profileRow: Gtk.Box
+  profileDropdown: SelectControl
   slider: Astal.Slider
   valueLabel: Gtk.Label
 }
@@ -43,8 +46,32 @@ function uniqueEndpointLabels(endpoints: AstalWp.Endpoint[]) {
   )
 }
 
+function profileLabel(profile: AstalWp.Profile) {
+  return profile.description || profile.name
+}
+
+function uniqueProfileLabels(profiles: AstalWp.Profile[]) {
+  const labels = profiles.map(profileLabel)
+  const counts = new Map<string, number>()
+
+  for (const label of labels) counts.set(label, (counts.get(label) ?? 0) + 1)
+
+  return labels.map((label, index) =>
+    counts.get(label) === 1 ? label : `${label} (${profiles[index].name})`,
+  )
+}
+
 function compareEndpoints(left: AstalWp.Endpoint, right: AstalWp.Endpoint) {
   return endpointLabel(left).localeCompare(endpointLabel(right))
+}
+
+function compareProfiles(left: AstalWp.Profile, right: AstalWp.Profile) {
+  const availability = Number(right.available !== AstalWp.Available.NO) -
+    Number(left.available !== AstalWp.Available.NO)
+
+  if (availability !== 0) return availability
+
+  return right.priority - left.priority
 }
 
 function getDefaultEndpoint(kind: EndpointKind) {
@@ -89,7 +116,11 @@ function connectEndpointSignals(kind: EndpointKind, sync: () => void) {
   }
 }
 
-function setupDeviceDropdown(dropdown: SelectControl, kind: EndpointKind) {
+function setupDeviceDropdown(
+  dropdown: SelectControl,
+  kind: EndpointKind,
+  onDefaultChanged: () => void,
+) {
   let endpoints: AstalWp.Endpoint[] = []
   let syncing = false
 
@@ -122,11 +153,100 @@ function setupDeviceDropdown(dropdown: SelectControl, kind: EndpointKind) {
 
     const endpoint = endpoints[select.selected]
 
-    if (endpoint && !endpoint.is_default) endpoint.set_is_default(true)
+    if (!endpoint || endpoint.is_default) return
+
+    endpoint.set_is_default(true)
+    onDefaultChanged()
+    refreshSoon(onDefaultChanged)
   })
 
   connectEndpointSignals(kind, refresh)
   refresh()
+}
+
+function refreshSoon(refresh: () => void) {
+  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1200, () => {
+    refresh()
+    return GLib.SOURCE_REMOVE
+  })
+  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3200, () => {
+    refresh()
+    return GLib.SOURCE_REMOVE
+  })
+}
+
+function setupProfileDropdown(
+  row: Gtk.Box,
+  dropdown: SelectControl,
+  kind: EndpointKind,
+) {
+  let device: AstalWp.Device | null = null
+  let deviceSignals: number[] = []
+  let profiles: AstalWp.Profile[] = []
+  let syncing = false
+
+  const disconnectDevice = () => {
+    if (!device) return
+
+    for (const signal of deviceSignals) device.disconnect(signal)
+    deviceSignals = []
+  }
+
+  const bindDevice = (nextDevice: AstalWp.Device | null, refresh: () => void) => {
+    if (device?.id === nextDevice?.id) return
+
+    disconnectDevice()
+    device = nextDevice
+    deviceSignals = device
+      ? [
+          device.connect("notify::active-profile-id", refresh),
+          device.connect("notify::description", refresh),
+          device.connect("notify::profiles", refresh),
+        ]
+      : []
+  }
+
+  const refresh = () => {
+    const endpoint = getDefaultEndpoint(kind)
+
+    bindDevice(endpoint.device, refresh)
+    profiles = [...(device?.profiles ?? [])]
+      .filter((profile) => profile.available !== AstalWp.Available.NO)
+      .sort(compareProfiles)
+
+    const selectedIndex = profiles.findIndex((profile) => profile.index === device?.active_profile_id)
+    const showSwitcher = profiles.length > 1
+
+    syncing = true
+    dropdown.set_model(
+      Gtk.StringList.new(
+        showSwitcher
+          ? uniqueProfileLabels(profiles)
+          : ["No profile options"],
+      ),
+    )
+    dropdown.set_selected(selectedIndex >= 0 ? selectedIndex : 0)
+    dropdown.set_sensitive(showSwitcher)
+    row.set_visible(showSwitcher)
+    syncing = false
+  }
+
+  dropdown.connect("notify::selected", (select) => {
+    if (syncing || !device) return
+
+    const profile = profiles[select.selected]
+
+    if (!profile || profile.available === AstalWp.Available.NO) return
+    if (profile.index === device.active_profile_id) return
+
+    device.set_active_profile_id(profile.index)
+    refreshSoon(refresh)
+  })
+
+  connectEndpointSignals(kind, refresh)
+  refresh()
+
+  return refresh
 }
 
 function setupSoundButton(button: Gtk.MenuButton, controls: SoundButtonControls) {
@@ -210,13 +330,19 @@ function setupAudioRow(kind: EndpointKind, icon: string, controls: AudioRowContr
   })
 
   controls.muteButton.connect("clicked", () => endpoint.set_mute(!endpoint.mute))
-  setupDeviceDropdown(controls.dropdown, kind)
+  const refreshProfiles = setupProfileDropdown(controls.profileRow, controls.profileDropdown, kind)
+
+  setupDeviceDropdown(controls.dropdown, kind, refreshProfiles)
   connectEndpointSignals(kind, bindEndpoint)
   bindEndpoint()
 }
 
 function DeviceDropdown({ onReady }: { onReady: (dropdown: SelectControl) => void }) {
   return <Select class="audio-device-select" hexpand onReady={onReady} />
+}
+
+function ProfileDropdown({ onReady }: { onReady: (dropdown: SelectControl) => void }) {
+  return <Select class="audio-profile-select" hexpand onReady={onReady} />
 }
 
 function AudioRow({
@@ -239,6 +365,8 @@ function AudioRow({
       !controls.icon ||
       !controls.muteButton ||
       !controls.muteIcon ||
+      !controls.profileDropdown ||
+      !controls.profileRow ||
       !controls.slider ||
       !controls.valueLabel
     ) {
@@ -252,6 +380,8 @@ function AudioRow({
       icon: controls.icon,
       muteButton: controls.muteButton,
       muteIcon: controls.muteIcon,
+      profileDropdown: controls.profileDropdown,
+      profileRow: controls.profileRow,
       slider: controls.slider,
       valueLabel: controls.valueLabel,
     })
@@ -311,6 +441,23 @@ function AudioRow({
           maybeSetup()
         }}
       />
+      <box
+        class="audio-profile-row"
+        orientation={Gtk.Orientation.HORIZONTAL}
+        visible={false}
+        $={(row) => {
+          controls = { ...controls, profileRow: row }
+          maybeSetup()
+        }}
+      >
+        <label class="audio-profile-title" xalign={0} label="Device profile" />
+        <ProfileDropdown
+          onReady={(dropdown) => {
+            controls = { ...controls, profileDropdown: dropdown }
+            maybeSetup()
+          }}
+        />
+      </box>
       <slider
         class="audio-slider"
         hexpand

@@ -513,6 +513,7 @@ window.Bar {
   .system-monitor-subtitle,
   .audio-row-device,
   .audio-row-value,
+  .audio-profile-title,
   .bluetooth-count,
   .bluetooth-device-status,
   .bluetooth-profile-title {
@@ -637,6 +638,19 @@ window.Bar {
 
   .audio-device-select {
     margin: 0 0 0.5rem;
+  }
+
+  .audio-profile-row {
+    margin: 0 0 0.5rem;
+  }
+
+  .audio-profile-title {
+    margin-right: 0.5rem;
+    min-width: 6.5rem;
+  }
+
+  .audio-profile-select {
+    min-width: 13rem;
   }
 
   .audio-row-header {
