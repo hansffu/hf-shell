@@ -1,8 +1,11 @@
 import { Gtk } from "ags/gtk4"
+import GLib from "gi://GLib"
 import { Accessor, createBinding, createComputed } from "gnim"
+import { appIconName } from "../service/DesktopIcons"
 import {
   dismissNotification,
   markRead,
+  notificationUrgency,
 } from "../service/Notifications"
 import type { Notification, NotificationAction } from "../service/Notifications"
 import { NotificationActions, notificationActions } from "./NotificationActions"
@@ -11,8 +14,53 @@ function plainBody(body: string) {
   return body.replace(/<[^>]*>/g, "").trim()
 }
 
-function iconName(notification: Notification) {
-  return notification.app_icon || notification.desktop_entry || "dialog-information"
+function filePath(source: string) {
+  if (source.startsWith("file://")) {
+    try {
+      const [path] = GLib.filename_from_uri(source)
+
+      return path
+    } catch (error) {
+      void error
+      return null
+    }
+  }
+
+  if (GLib.path_is_absolute(source) && GLib.file_test(source, GLib.FileTest.EXISTS)) {
+    return source
+  }
+
+  return null
+}
+
+function setImageSource(image: Gtk.Image, source: string) {
+  const path = filePath(source)
+
+  if (path) {
+    image.set_from_file(path)
+    return true
+  }
+
+  if (GLib.path_is_absolute(source) || source.startsWith("file://")) return false
+
+  image.set_from_icon_name(source)
+  return true
+}
+
+function setNotificationImage(image: Gtk.Image, notification: Notification) {
+  const sources: Array<string | null | undefined> = [
+    notification.image,
+    notification.app_icon,
+    appIconName(notification.desktop_entry, ""),
+    appIconName(notification.app_name, ""),
+    "dialog-information",
+  ]
+
+  for (const source of sources) {
+    const trimmed = source?.trim()
+
+    if (trimmed && setImageSource(image, trimmed)) return
+  }
 }
 
 function title(notification: Notification) {
@@ -36,21 +84,19 @@ export default function NotificationCard({
   progress?: Accessor<number>
   showProgress?: boolean
 }) {
+  const urgency = notificationUrgency(notification)
   const appName = createBinding(notification, "app_name")
   const summary = createBinding(notification, "summary")
   const body = createBinding(notification, "body")
-  const appIcon = createBinding(notification, "app_icon")
-  const desktopEntry = createBinding(notification, "desktop_entry")
-  const cardIcon = createComputed(() => appIcon() || desktopEntry() || iconName(notification))
   const cardTitle = createComputed(() => summary() || appName() || title(notification))
   const cardBody = createComputed(() => plainBody(body()))
   const cardActions = actions ?? createComputed(() => notificationActions(notification))
 
   return (
     <box
-      class={`shell-panel notification ${className}`}
+      class={`shell-panel notification ${urgency} ${className}`}
       orientation={Gtk.Orientation.VERTICAL}
-      widthRequest={320}
+      widthRequest={384}
       $={(self: Gtk.Box) => {
         if (!onHover) return
 
@@ -91,7 +137,11 @@ export default function NotificationCard({
         </button>
       </box>
       <box orientation={Gtk.Orientation.HORIZONTAL}>
-        <image iconName={cardIcon} pixelSize={32} useFallback />
+        <image
+          pixelSize={32}
+          useFallback
+          $={(image: Gtk.Image) => setNotificationImage(image, notification)}
+        />
         <box class="notification-content" orientation={Gtk.Orientation.VERTICAL} hexpand>
           <label
             class="notification-title"

@@ -53,8 +53,8 @@ export type NotificationPopup = {
   timerId: number
 }
 
-const LOW_POPUP_TIMEOUT_MS = 4000
-const NORMAL_POPUP_TIMEOUT_MS = 6000
+const LOW_POPUP_TIMEOUT_MS = 6000
+const NORMAL_POPUP_TIMEOUT_MS = 10_000
 const CRITICAL_POPUP_TIMEOUT_MS = 0
 const TICK_MS = 100
 const IDLE_THRESHOLD_MS = 60_000
