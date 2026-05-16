@@ -86,11 +86,31 @@ export function getBluetoothState(): BluetoothState {
 }
 
 export function connectBluetoothDevice(device: BluetoothDevice) {
-  void device.connect_device().catch(() => undefined)
+  try {
+    device.connect_device((_source, result) => {
+      try {
+        device.connect_device_finish(result)
+      } catch (error) {
+        void error
+      }
+    })
+  } catch (error) {
+    void error
+  }
 }
 
 export function disconnectBluetoothDevice(device: BluetoothDevice) {
-  void device.disconnect_device().catch(() => undefined)
+  try {
+    device.disconnect_device((_source, result) => {
+      try {
+        device.disconnect_device_finish(result)
+      } catch (error) {
+        void error
+      }
+    })
+  } catch (error) {
+    void error
+  }
 }
 
 export function setBluetoothPowered(powered: boolean) {

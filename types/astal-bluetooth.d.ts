@@ -1,6 +1,7 @@
 declare module "gi://AstalBluetooth" {
   namespace AstalBluetooth {
     type SignalCallback = (...args: any[]) => void
+    type AsyncReadyCallback<TSource> = (source: TSource, result: unknown) => void
 
     class Adapter {
       powered: boolean
@@ -21,9 +22,11 @@ declare module "gi://AstalBluetooth" {
       paired: boolean
 
       connect(signal: string, callback: SignalCallback): number
-      connect_device(): Promise<void>
+      connect_device(callback: AsyncReadyCallback<Device>): void
+      connect_device_finish(result: unknown): void
       disconnect(id: number): void
-      disconnect_device(): Promise<void>
+      disconnect_device(callback: AsyncReadyCallback<Device>): void
+      disconnect_device_finish(result: unknown): void
     }
 
     class Bluetooth {

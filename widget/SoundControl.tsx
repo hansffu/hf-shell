@@ -1,6 +1,5 @@
 import { Astal, Gtk } from "ags/gtk4"
 import AstalWp from "gi://AstalWp"
-import GLib from "gi://GLib"
 import Panel, { PanelSection } from "./Panel"
 import { setupPanelPopover } from "./PanelRevealer"
 import Select, { type SelectControl } from "./Select"
@@ -105,6 +104,14 @@ function iconName(icon: string, muted: boolean) {
 }
 
 function connectEndpointSignals(kind: EndpointKind, sync: () => void) {
+  const defaultEndpoint = getDefaultEndpoint(kind)
+
+  defaultEndpoint.connect("notify::description", sync)
+  defaultEndpoint.connect("notify::device", sync)
+  defaultEndpoint.connect("notify::device-id", sync)
+  defaultEndpoint.connect("notify::id", sync)
+  defaultEndpoint.connect("notify::name", sync)
+
   if (kind === "speaker") {
     audio.connect("notify::default-speaker", sync)
     audio.connect("speaker-added", sync)
@@ -122,11 +129,30 @@ function setupDeviceDropdown(
   onDefaultChanged: () => void,
 ) {
   let endpoints: AstalWp.Endpoint[] = []
+  let endpointSignals: Array<[AstalWp.Endpoint, number]> = []
   let syncing = false
+
+  const disconnectEndpoints = () => {
+    for (const [endpoint, signal] of endpointSignals) endpoint.disconnect(signal)
+    endpointSignals = []
+  }
+
+  const bindEndpointSignals = () => {
+    disconnectEndpoints()
+    endpointSignals = endpoints.flatMap((endpoint) => [
+      [endpoint, endpoint.connect("notify::description", refresh)] as [AstalWp.Endpoint, number],
+      [endpoint, endpoint.connect("notify::is-default", sync)] as [AstalWp.Endpoint, number],
+      [endpoint, endpoint.connect("notify::name", refresh)] as [AstalWp.Endpoint, number],
+    ])
+  }
 
   const sync = () => {
     const defaultEndpoint = getDefaultEndpoint(kind)
-    const selectedIndex = endpoints.findIndex((endpoint) => endpoint.id === defaultEndpoint.id)
+    let selectedIndex = endpoints.findIndex((endpoint) => endpoint.id === defaultEndpoint.id)
+
+    if (selectedIndex < 0) {
+      selectedIndex = endpoints.findIndex((endpoint) => endpoint.is_default)
+    }
 
     syncing = true
     dropdown.set_selected(selectedIndex >= 0 ? selectedIndex : 0)
@@ -135,6 +161,7 @@ function setupDeviceDropdown(
 
   const refresh = () => {
     endpoints = getEndpoints(kind)
+    bindEndpointSignals()
 
     syncing = true
     dropdown.set_model(
@@ -157,22 +184,10 @@ function setupDeviceDropdown(
 
     endpoint.set_is_default(true)
     onDefaultChanged()
-    refreshSoon(onDefaultChanged)
   })
 
   connectEndpointSignals(kind, refresh)
   refresh()
-}
-
-function refreshSoon(refresh: () => void) {
-  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1200, () => {
-    refresh()
-    return GLib.SOURCE_REMOVE
-  })
-  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3200, () => {
-    refresh()
-    return GLib.SOURCE_REMOVE
-  })
 }
 
 function setupProfileDropdown(
@@ -240,7 +255,6 @@ function setupProfileDropdown(
     if (profile.index === device.active_profile_id) return
 
     device.set_active_profile_id(profile.index)
-    refreshSoon(refresh)
   })
 
   connectEndpointSignals(kind, refresh)
@@ -317,6 +331,9 @@ function setupAudioRow(kind: EndpointKind, icon: string, controls: AudioRowContr
     endpoint = getDefaultEndpoint(kind)
     endpointSignals = [
       endpoint.connect("notify::description", update),
+      endpoint.connect("notify::device", update),
+      endpoint.connect("notify::device-id", update),
+      endpoint.connect("notify::id", update),
       endpoint.connect("notify::mute", update),
       endpoint.connect("notify::name", update),
       endpoint.connect("notify::volume", update),
