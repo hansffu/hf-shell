@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app"
 import { Gdk, Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
+import { showScreenCaptureOsd } from "./Osd"
 
 export type ScreenToolkitCommand =
   | "annotate"
@@ -47,12 +48,55 @@ function spawnScreenToolkit(args: string[]) {
   )
 }
 
+function commandOsd(command: ScreenToolkitCommand) {
+  switch (command) {
+    case "annotate":
+      return ["Select screenshot region", "document-edit-symbolic"] as const
+    case "annotateFullscreen":
+      return ["Capturing full screen", "view-fullscreen-symbolic"] as const
+    case "annotateWindow":
+      return ["Capturing active window", "window-symbolic"] as const
+    case "measure":
+      return ["Select area to measure", "tool-measure-symbolic"] as const
+    case "colorPicker":
+      return ["Pick a color", "color-select-symbolic"] as const
+    case "palette":
+      return ["Select area for palette", "applications-graphics-symbolic"] as const
+    case "ocr":
+      return ["Select area for OCR", "insert-text-symbolic"] as const
+    case "qr":
+      return ["Select area for QR scan", "view-grid-symbolic"] as const
+    case "lens":
+      return ["Select area for Lens", "edit-find-symbolic"] as const
+    case "record":
+      return ["Recording region GIF", "media-record-symbolic"] as const
+    case "recordMp4":
+      return ["Recording region MP4", "media-record-symbolic"] as const
+    case "recordFullscreen":
+      return ["Recording full screen GIF", "media-record-symbolic"] as const
+    case "recordFullscreenMp4":
+      return ["Recording full screen MP4", "media-record-symbolic"] as const
+    case "recordStop":
+      return ["Recording stopped", "media-playback-stop-symbolic"] as const
+    default:
+      return null
+  }
+}
+
 export function screenToolkitPollCommand(command: string) {
   return `sh '${scriptPath.replaceAll("'", "'\\''")}' ${command}`
 }
 
+function captureScopeLabel(scope: CaptureScope) {
+  if (scope === "fullscreen") return "full screen"
+  return scope
+}
+
 export function runScreenToolkit(command: ScreenToolkitCommand) {
   try {
+    const osd = commandOsd(command)
+
+    if (osd) showScreenCaptureOsd(osd[0], osd[1])
     spawnScreenToolkit([command])
   } catch (error) {
     void error
@@ -66,6 +110,12 @@ export function startScreenCapture(
 ) {
   try {
     const duration = durationSeconds > 0 ? String(durationSeconds) : ""
+    const durationLabel = durationSeconds > 0 ? `${durationSeconds}s ` : ""
+
+    showScreenCaptureOsd(
+      `Recording ${durationLabel}${captureScopeLabel(scope)} ${format.toUpperCase()}`,
+      "media-record-symbolic",
+    )
     spawnScreenToolkit(["capture", format, scope, duration])
   } catch (error) {
     void error
@@ -96,11 +146,13 @@ function runScreenToolkitSync(command: string) {
 }
 
 export function pinRegion(gdkmonitor: Gdk.Monitor) {
+  showScreenCaptureOsd("Select region to pin", "insert-image-symbolic")
   const file = runScreenToolkitSync("pin-region")
   if (file) createPinnedImage(file, gdkmonitor)
 }
 
 export function pinImage(gdkmonitor: Gdk.Monitor) {
+  showScreenCaptureOsd("Choose image to pin", "folder-pictures-symbolic")
   const file = runScreenToolkitSync("pick-file")
   if (file) createPinnedImage(file, gdkmonitor)
 }

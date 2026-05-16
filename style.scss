@@ -932,6 +932,36 @@ window.Notifications {
     min-width: 1.5rem;
     padding: 0;
   }
+
+  .osd-popup {
+    padding: 1rem 1.125rem;
+
+    &:hover {
+      background: $bg-color;
+    }
+  }
+
+  .osd-icon {
+    margin-right: 0.75rem;
+  }
+
+  .osd-content {
+    min-width: 0;
+  }
+
+  .osd-level {
+    min-height: 0.5rem;
+    margin-top: 0.75rem;
+
+    trough {
+      min-height: 0.5rem;
+    }
+
+    block.filled {
+      background: $active-color;
+      border-radius: 999px;
+    }
+  }
 }
 
 window.Notifications {
