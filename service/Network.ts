@@ -46,12 +46,6 @@ type SavedConnection = {
   type: string
 }
 
-let nextCommandId = 0
-
-function debug(message: string) {
-  console.log(`[Network] ${message}`)
-}
-
 function bytesToString(bytes: Uint8Array) {
   return String.fromCharCode(...bytes)
 }
@@ -79,23 +73,15 @@ function runSync(args: string[]) {
 }
 
 function runAsync(args: string[]) {
-  debug(`spawn ${args.join(" ")}`)
-
   try {
     GLib.spawn_async(null, args, null, GLib.SpawnFlags.SEARCH_PATH, null)
   } catch (error) {
-    debug(`spawn failed ${args.join(" ")}: ${String(error)}`)
+    void error
   }
 }
 
 function runOutputAsync(args: string[]) {
   return new Promise<string | null>((resolve) => {
-    const id = ++nextCommandId
-    const started = GLib.get_monotonic_time()
-    const command = args.join(" ")
-
-    debug(`#${id} start ${command}`)
-
     try {
       const process = Gio.Subprocess.new(
         args,
@@ -105,18 +91,16 @@ function runOutputAsync(args: string[]) {
       process.communicate_utf8_async(null, null, (_process, result) => {
         try {
           const [ok, stdout] = process.communicate_utf8_finish(result)
-          const elapsedMs = Math.round((GLib.get_monotonic_time() - started) / 1000)
           const successful = ok && process.get_successful()
 
-          debug(`#${id} ${successful ? "ok" : "failed"} ${elapsedMs}ms ${command}`)
           resolve(successful ? (stdout ?? "").trim() : null)
         } catch (error) {
-          debug(`#${id} finish failed ${command}: ${String(error)}`)
+          void error
           resolve(null)
         }
       })
     } catch (error) {
-      debug(`#${id} start failed ${command}: ${String(error)}`)
+      void error
       resolve(null)
     }
   })
@@ -408,7 +392,6 @@ export function getNetworkState(): NetworkState {
 }
 
 export async function getNetworkStateAsync(): Promise<NetworkState> {
-  debug("state async start")
   const [saved, active, connectivity, networkingEnabled, wifiDevice, wifiEnabled] = await Promise.all([
     getSavedConnectionsAsync(),
     getActiveConnectionsAsync(),
@@ -421,10 +404,6 @@ export async function getNetworkStateAsync(): Promise<NetworkState> {
   const wifiAccessPoints = await getWifiAccessPointsAsync(knownWifi, active)
   const activeWifi = wifiAccessPoints.find((accessPoint) => accessPoint.active) ?? null
   const vpnConnections = getVpnConnections(saved, active)
-
-  debug(
-    `state async done wifi=${wifiAccessPoints.length} vpn=${vpnConnections.length} activeWifi=${activeWifi?.ssid ?? "none"}`,
-  )
 
   return {
     activeWifi,
@@ -451,7 +430,6 @@ export function getNetworkSummary(): NetworkSummary {
 }
 
 export async function getNetworkSummaryAsync(): Promise<NetworkSummary> {
-  debug("summary async start")
   const [active, networkingEnabled, wifiDevice, wifiEnabled] = await Promise.all([
     getActiveConnectionsAsync(),
     nmcliAsync(["networking"]).then((state) => state === "enabled"),
@@ -460,10 +438,6 @@ export async function getNetworkSummaryAsync(): Promise<NetworkSummary> {
   ])
   const activeWifi = active.find((connection) => isWifiType(connection.type))
   const activeVpnCount = active.filter((connection) => isVpnType(connection.type)).length
-
-  debug(
-    `summary async done wifi=${activeWifi?.name ?? "none"} vpn=${activeVpnCount} device=${wifiDevice ?? "none"}`,
-  )
 
   return {
     activeVpnCount,

@@ -31,10 +31,6 @@ type NetworkListControls = {
   wifiSwitch: Gtk.Switch
 }
 
-function debug(message: string) {
-  console.log(`[NetworkControl] ${message}`)
-}
-
 function clearBox(box: Gtk.Box) {
   let child = box.get_first_child()
 
@@ -137,13 +133,9 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
   const refresh = () => {
     const id = ++requestId
 
-    debug(`button refresh start id=${id}`)
     void getNetworkSummaryAsync()
       .then((state) => {
-        if (id !== requestId) {
-          debug(`button refresh stale id=${id} current=${requestId}`)
-          return
-        }
+        if (id !== requestId) return
 
         controls.icon.set_from_icon_name(
           state.wifiEnabled && state.activeWifiName
@@ -156,22 +148,17 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
             ? `${summaryStatusText(state)} - ${vpnLabel(state.activeVpnCount)}`
             : summaryStatusText(state),
         )
-        debug(`button refresh done id=${id} wifi=${state.activeWifiName ?? "none"} vpn=${state.activeVpnCount}`)
       })
       .catch((error) => {
-        if (id !== requestId) {
-          debug(`button refresh error stale id=${id} current=${requestId}: ${String(error)}`)
-          return
-        }
+        void error
+        if (id !== requestId) return
 
         controls.icon.set_from_icon_name("network-wireless-offline-symbolic")
         controls.label.set_label("")
         button.set_tooltip_text("Network unavailable")
-        debug(`button refresh failed id=${id}: ${String(error)}`)
       })
   }
 
-  debug("button setup")
   button.connect("map", refresh)
   connectNetworkStateSignals(refresh)
   controls.icon.set_from_icon_name("network-wireless-symbolic")
@@ -193,11 +180,9 @@ function setupNetworkList(controls: NetworkListControls) {
   let visible = controls.popover.visible
   let currentState: NetworkState | null = null
   let requestId = 0
-  let rendering = false
   let syncingSwitch = false
 
   const showLoading = () => {
-    debug("panel show loading")
     controls.statusLabel.set_label("Loading")
     controls.wifiSwitch.set_sensitive(false)
     clearBox(controls.list)
@@ -208,10 +193,6 @@ function setupNetworkList(controls: NetworkListControls) {
 
   const render = (state: NetworkState) => {
     currentState = state
-    rendering = true
-    debug(
-      `panel render wifi=${state.wifiAccessPoints.length} vpn=${state.vpnConnections.length} activeWifi=${state.activeWifi?.ssid ?? "none"} visible=${visible}`,
-    )
     controls.statusLabel.set_label(statusText(state))
     syncingSwitch = true
     controls.wifiSwitch.set_active(state.wifiEnabled)
@@ -243,31 +224,21 @@ function setupNetworkList(controls: NetworkListControls) {
       }
     }
 
-    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-      rendering = false
-      return GLib.SOURCE_REMOVE
-    })
   }
 
   const refresh = (loading = currentState === null) => {
     const id = ++requestId
 
-    debug(`panel refresh start id=${id} loading=${loading} visible=${visible}`)
     if (loading) showLoading()
     void getNetworkStateAsync()
       .then((state) => {
-        if (id !== requestId || !visible) {
-          debug(`panel refresh ignored id=${id} current=${requestId} visible=${visible}`)
-          return
-        }
+        if (id !== requestId || !visible) return
 
         render(state)
       })
       .catch((error) => {
-        if (id !== requestId || !visible) {
-          debug(`panel refresh error ignored id=${id} current=${requestId} visible=${visible}: ${String(error)}`)
-          return
-        }
+        void error
+        if (id !== requestId || !visible) return
 
         controls.statusLabel.set_label("Network unavailable")
         controls.wifiSwitch.set_sensitive(false)
@@ -275,22 +246,17 @@ function setupNetworkList(controls: NetworkListControls) {
         clearBox(controls.vpnList)
         controls.list.append(createEmptyState("dialog-warning-symbolic", "NetworkManager did not respond"))
         controls.vpnList.append(createEmptyState("network-vpn-symbolic", "VPN unavailable"))
-        debug(`panel refresh failed id=${id}: ${String(error)}`)
       })
   }
 
-  debug(`panel setup visible=${visible}`)
   connectNetworkStateSignals(() => {
-    debug(`panel periodic visible=${visible}`)
     if (visible) refresh(false)
   })
   controls.popover.connect("notify::visible", () => {
     visible = controls.popover.visible
-    debug(`popover notify visible=${visible}`)
 
     if (visible) {
       GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-        debug(`popover idle visible=${visible}`)
         if (visible) refresh(false)
 
         return GLib.SOURCE_REMOVE
@@ -299,14 +265,9 @@ function setupNetworkList(controls: NetworkListControls) {
   })
   controls.popover.connect("closed", () => {
     visible = controls.popover.visible
-    debug(`popover closed visible=${visible} rendering=${rendering}`)
-  })
-  controls.popover.connect("destroy", () => {
-    debug("popover destroy")
   })
 
   controls.wifiSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
-    debug(`wifi switch notify active=${toggle.active} syncing=${syncingSwitch} hasState=${Boolean(currentState)}`)
     if (syncingSwitch || !currentState) return
 
     const state = currentState
@@ -412,7 +373,6 @@ export default function NetworkControl() {
     if (buttonSetupDone || !menuButton || !buttonControls.icon || !buttonControls.label) return
 
     buttonSetupDone = true
-    debug("maybeSetupButton ready")
     setupNetworkButton(menuButton, {
       icon: buttonControls.icon,
       label: buttonControls.label,
@@ -432,7 +392,6 @@ export default function NetworkControl() {
     }
 
     listSetupDone = true
-    debug("maybeSetupList ready")
     refreshList = setupNetworkList({
       list: listControls.list,
       popover: listControls.popover,
@@ -448,7 +407,6 @@ export default function NetworkControl() {
       direction={Gtk.ArrowType.RIGHT}
       $={(button) => {
         menuButton = button
-        debug("menubutton ready")
         maybeSetupButton()
       }}
     >
@@ -459,7 +417,6 @@ export default function NetworkControl() {
           useFallback
           $={(image) => {
             buttonControls = { ...buttonControls, icon: image }
-            debug("button icon ready")
             maybeSetupButton()
           }}
         />
@@ -467,7 +424,6 @@ export default function NetworkControl() {
           class="network-control-vpn"
           $={(label) => {
             buttonControls = { ...buttonControls, label }
-            debug("button label ready")
             maybeSetupButton()
           }}
         />
@@ -475,7 +431,6 @@ export default function NetworkControl() {
       <popover
         $={(popover: Gtk.Popover) => {
           listControls = { ...listControls, popover }
-          debug("popover ready")
           setupPanelPopover(popover)
           maybeSetupList()
         }}
@@ -488,7 +443,6 @@ export default function NetworkControl() {
               class="network-menu-subtitle"
               $={(label) => {
                 listControls = { ...listControls, statusLabel: label }
-                debug("status label ready")
                 maybeSetupList()
               }}
             />
@@ -501,7 +455,6 @@ export default function NetworkControl() {
               tooltipText="Wi-Fi power"
               $={(toggle) => {
                 listControls = { ...listControls, wifiSwitch: toggle }
-                debug("wifi switch ready")
                 maybeSetupList()
               }}
             />
@@ -509,7 +462,6 @@ export default function NetworkControl() {
               class="network-rescan"
               tooltipText="Rescan Wi-Fi"
               onClicked={() => {
-                debug("rescan clicked")
                 rescanWifi()
                 if (refreshList) refreshSoon(refreshList)
               }}
@@ -520,7 +472,6 @@ export default function NetworkControl() {
               class="network-manager"
               tooltipText="Open network settings"
               onClicked={() => {
-                debug("network manager clicked")
                 openNetworkManager()
               }}
             >
@@ -539,7 +490,6 @@ export default function NetworkControl() {
                 orientation={Gtk.Orientation.VERTICAL}
                 $={(box) => {
                   listControls = { ...listControls, list: box }
-                  debug("wifi list ready")
                   maybeSetupList()
                 }}
               />
@@ -557,7 +507,6 @@ export default function NetworkControl() {
                 orientation={Gtk.Orientation.VERTICAL}
                 $={(box) => {
                   listControls = { ...listControls, vpnList: box }
-                  debug("vpn list ready")
                   maybeSetupList()
                 }}
               />
