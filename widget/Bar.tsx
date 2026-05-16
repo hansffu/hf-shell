@@ -2,6 +2,7 @@ import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
 import { setupEscapeToClosePanels } from "../service/Panels"
 import BluetoothControl from "./BluetoothControl"
+import NetworkControl from "./NetworkControl"
 import NotificationButton from "./NotificationButton"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
 import SlackUnread from "./SlackUnread"
@@ -44,6 +45,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
           <ScreenToolkit gdkmonitor={gdkmonitor} />
           <ScreenCaptureStopButton />
           <SystemMonitor />
+          <NetworkControl />
           <BluetoothControl />
           <SoundControl />
         </box>
