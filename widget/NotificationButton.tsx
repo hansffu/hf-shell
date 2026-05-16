@@ -1,6 +1,6 @@
 import { Gtk } from "ags/gtk4"
 import { createComputed } from "gnim"
-import { markAllRead, unreadCount } from "../service/Notifications"
+import { closeNotificationCenter, openNotificationCenter, unreadCount } from "../service/Notifications"
 import NotificationCenter from "./NotificationCenter"
 import { setupPanelPopover } from "./PanelRevealer"
 
@@ -18,7 +18,8 @@ export default function NotificationButton() {
         $={(widget: Gtk.Popover) => {
           popover = widget
           setupPanelPopover(widget)
-          widget.connect("show", markAllRead)
+          widget.connect("show", openNotificationCenter)
+          widget.connect("closed", closeNotificationCenter)
         }}
       >
         <NotificationCenter onClose={() => popover?.popdown()} />

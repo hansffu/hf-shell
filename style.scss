@@ -804,16 +804,12 @@ window.Notifications {
     margin-left: 0.375rem;
   }
 
-  .notification-center-toolbar {
-    margin-bottom: 0.75rem;
-
-    button {
-      margin-right: 0.375rem;
-    }
-  }
-
   .notification-center-body {
     padding-bottom: 1rem;
+  }
+
+  .notification-center-section {
+    margin: 0;
   }
 
   .notification-list {
@@ -822,7 +818,7 @@ window.Notifications {
 
   .notification-empty {
     color: #7f8490;
-    margin-top: 4rem;
+    margin: 3rem 0;
 
     label {
       margin-top: 0.5rem;

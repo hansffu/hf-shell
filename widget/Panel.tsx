@@ -14,6 +14,7 @@ type PanelSectionProps = {
   children: Gtk.Widget | Gtk.Widget[]
   class?: string
   title: string
+  visible?: boolean | Accessor<boolean>
 }
 
 export default function Panel({
@@ -50,11 +51,12 @@ export function PanelSection({
   children,
   class: className = "",
   title,
+  visible = true,
 }: PanelSectionProps) {
   const classes = ["panel-section", className].filter(Boolean).join(" ")
 
   return (
-    <box class={classes} orientation={Gtk.Orientation.VERTICAL}>
+    <box class={classes} orientation={Gtk.Orientation.VERTICAL} visible={visible}>
       <label class="panel-section-title" xalign={0} label={title} />
       <box class="panel-section-content" orientation={Gtk.Orientation.VERTICAL}>
         {children}

@@ -61,6 +61,7 @@ const IDLE_THRESHOLD_MS = 60_000
 
 export const notifd = Notifd.get_default() as NotifdService
 export const [records, setRecords] = createState<NotificationRecord[]>([])
+export const [notificationCenterUnreadIds, setNotificationCenterUnreadIds] = createState<Set<number>>(new Set())
 export const [popups, setPopups] = createState<NotificationPopup[]>([])
 export const unreadCount = createComputed(
   () => records().filter((record) => !record.read).length,
@@ -132,23 +133,48 @@ function upsertRecord(notification: Notification) {
 }
 
 export function markRead(id: number) {
+  setNotificationCenterUnreadIds((current) => {
+    const next = new Set(current)
+
+    next.delete(id)
+    return next
+  })
   setRecords((current) =>
     current.map((record) => (record.id === id ? { ...record, read: true } : record)),
   )
 }
 
 export function markAllRead() {
+  setNotificationCenterUnreadIds(new Set())
   setRecords((current) => current.map((record) => ({ ...record, read: true })))
 }
 
 export function clearRecord(id: number) {
   removePopup(id)
+  setNotificationCenterUnreadIds((current) => {
+    const next = new Set(current)
+
+    next.delete(id)
+    return next
+  })
   setRecords((current) => current.filter((record) => record.id !== id))
 }
 
 export function clearAllRecords() {
   for (const popup of popups()) removePopup(popup.id)
+  setNotificationCenterUnreadIds(new Set())
   setRecords([])
+}
+
+export function openNotificationCenter() {
+  setNotificationCenterUnreadIds(
+    new Set(records().filter((record) => !record.read).map((record) => record.id)),
+  )
+  setRecords((current) => current.map((record) => ({ ...record, read: true })))
+}
+
+export function closeNotificationCenter() {
+  setNotificationCenterUnreadIds(new Set())
 }
 
 export function dismissNotification(id: number) {
@@ -165,6 +191,7 @@ export function dismissNotification(id: number) {
 export function dismissAllNotifications() {
   for (const record of records()) record.notification.dismiss()
   for (const popup of popups()) removePopup(popup.id)
+  setNotificationCenterUnreadIds(new Set())
   setRecords((current) => current.map((record) => ({ ...record, resolved: true })))
 }
 
