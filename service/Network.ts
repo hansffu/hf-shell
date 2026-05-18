@@ -449,10 +449,12 @@ export async function getNetworkSummaryAsync(): Promise<NetworkSummary> {
 }
 
 export function connectNetworkStateSignals(refresh: () => void) {
-  GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
+  const timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
     refresh()
     return GLib.SOURCE_CONTINUE
   })
+
+  return () => GLib.source_remove(timer)
 }
 
 export function setWifiEnabled(enabled: boolean) {

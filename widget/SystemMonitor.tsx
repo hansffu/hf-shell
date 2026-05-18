@@ -1,7 +1,8 @@
 import { Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
+import { createState } from "gnim"
+import { PanelPopover } from "./LazyPopoverContent"
 import Panel, { PanelSection } from "./Panel"
-import { setupPanelPopover } from "./PanelRevealer"
 
 type CpuSnapshot = {
   idle: number
@@ -29,17 +30,17 @@ type SystemMonitorControls = {
   compactTempIcon: TemperatureIcon
   compactTempLabel: Gtk.Label
   compactTempRow: Gtk.Widget
-  cpuGraph: Gtk.DrawingArea
-  cpuLabel: Gtk.Label
-  cpuTempGraph: Gtk.DrawingArea
-  cpuTempLabel: Gtk.Label
-  loadLabel: Gtk.Label
-  memoryAvailableLabel: Gtk.Label
-  memoryGraph: Gtk.DrawingArea
-  memoryLabel: Gtk.Label
-  memoryUsedLabel: Gtk.Label
-  processLabel: Gtk.Label
-  uptimeLabel: Gtk.Label
+  cpuGraph?: Gtk.DrawingArea
+  cpuLabel?: Gtk.Label
+  cpuTempGraph?: Gtk.DrawingArea
+  cpuTempLabel?: Gtk.Label
+  loadLabel?: Gtk.Label
+  memoryAvailableLabel?: Gtk.Label
+  memoryGraph?: Gtk.DrawingArea
+  memoryLabel?: Gtk.Label
+  memoryUsedLabel?: Gtk.Label
+  processLabel?: Gtk.Label
+  uptimeLabel?: Gtk.Label
 }
 
 type GraphContext = {
@@ -465,17 +466,17 @@ function updateMonitor(controls: SystemMonitorControls) {
   controls.button.set_tooltip_text(
     `CPU ${percent(sample.cpu)} · Temp ${formatTemperature(sample.cpuTemp)} · Memory ${percent(sample.memoryUsage)}`,
   )
-  controls.cpuLabel.set_label(percent(sample.cpu))
-  controls.cpuTempLabel.set_label(formatTemperature(sample.cpuTemp))
-  controls.memoryLabel.set_label(`${percent(sample.memoryUsage)} of ${formatKib(sample.memoryTotal)}`)
-  controls.memoryUsedLabel.set_label(formatKib(sample.memoryUsed))
-  controls.memoryAvailableLabel.set_label(formatKib(sample.memoryAvailable))
-  controls.loadLabel.set_label(sample.load)
-  controls.processLabel.set_label(String(sample.processCount))
-  controls.uptimeLabel.set_label(sample.uptime)
-  controls.cpuGraph.queue_draw()
-  controls.cpuTempGraph.queue_draw()
-  controls.memoryGraph.queue_draw()
+  controls.cpuLabel?.set_label(percent(sample.cpu))
+  controls.cpuTempLabel?.set_label(formatTemperature(sample.cpuTemp))
+  controls.memoryLabel?.set_label(`${percent(sample.memoryUsage)} of ${formatKib(sample.memoryTotal)}`)
+  controls.memoryUsedLabel?.set_label(formatKib(sample.memoryUsed))
+  controls.memoryAvailableLabel?.set_label(formatKib(sample.memoryAvailable))
+  controls.loadLabel?.set_label(sample.load)
+  controls.processLabel?.set_label(String(sample.processCount))
+  controls.uptimeLabel?.set_label(sample.uptime)
+  controls.cpuGraph?.queue_draw()
+  controls.cpuTempGraph?.queue_draw()
+  controls.memoryGraph?.queue_draw()
 }
 
 function setupSystemMonitor(controls: SystemMonitorControls) {
@@ -497,22 +498,10 @@ function MetricRow({ label, value }: { label: string; value: Gtk.Label }) {
 }
 
 export default function SystemMonitor() {
-  const cpuGraph = createUsageGraph(cpuHistory, "CPU", 0.32, 0.69, 0.94)
+  const [open, setOpen] = createState(false)
   const compactTempIcon = createTemperatureIcon()
-  const cpuTempGraph = createUsageGraph(
-    cpuTempHistory,
-    "CPU temp",
-    1,
-    0.52,
-    0.32,
-    (value) => `${Math.round(value * 100)}°`,
-  )
-  const memoryGraph = createUsageGraph(memoryHistory, "Memory", 0.78, 0.47, 0.86)
   const controls: Partial<SystemMonitorControls> = {
     compactTempIcon,
-    cpuGraph,
-    cpuTempGraph,
-    memoryGraph,
   }
   let setupDone = false
 
@@ -526,15 +515,7 @@ export default function SystemMonitor() {
       !controls.compactMemoryRow ||
       !controls.compactTempIcon ||
       !controls.compactTempLabel ||
-      !controls.compactTempRow ||
-      !controls.cpuLabel ||
-      !controls.cpuTempLabel ||
-      !controls.loadLabel ||
-      !controls.memoryAvailableLabel ||
-      !controls.memoryLabel ||
-      !controls.memoryUsedLabel ||
-      !controls.processLabel ||
-      !controls.uptimeLabel
+      !controls.compactTempRow
     ) {
       return
     }
@@ -547,6 +528,7 @@ export default function SystemMonitor() {
     <menubutton
       class="system-monitor"
       direction={Gtk.ArrowType.RIGHT}
+      onNotifyActive={(button: Gtk.MenuButton) => setOpen(button.active)}
       $={(button) => {
         controls.button = button
         maybeSetup()
@@ -605,12 +587,24 @@ export default function SystemMonitor() {
           />
         </box>
       </box>
-      <popover
-        $={(popover: Gtk.Popover) => {
-          setupPanelPopover(popover)
-        }}
-      >
-        <Panel
+      <PanelPopover open={open} setOpen={setOpen}>
+        {() => {
+          const cpuGraph = createUsageGraph(cpuHistory, "CPU", 0.32, 0.69, 0.94)
+          const cpuTempGraph = createUsageGraph(
+            cpuTempHistory,
+            "CPU temp",
+            1,
+            0.52,
+            0.32,
+            (value) => `${Math.round(value * 100)}°`,
+          )
+          const memoryGraph = createUsageGraph(memoryHistory, "Memory", 0.78, 0.47, 0.86)
+
+          controls.cpuGraph = cpuGraph
+          controls.cpuTempGraph = cpuTempGraph
+          controls.memoryGraph = memoryGraph
+
+          return <Panel
           title="System Monitor"
           class="system-monitor-menu"
           headerEnd={<label class="system-monitor-subtitle" label="Live" />}
@@ -731,7 +725,8 @@ export default function SystemMonitor() {
             </box>
           </PanelSection>
         </Panel>
-      </popover>
+        }}
+      </PanelPopover>
     </menubutton>
   )
 }

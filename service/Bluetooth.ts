@@ -120,28 +120,44 @@ export function setBluetoothPowered(powered: boolean) {
 }
 
 export function connectBluetoothStateSignals(refresh: () => void) {
-  bluetooth.connect("notify::adapter", refresh)
-  bluetooth.connect("notify::adapters", refresh)
-  bluetooth.connect("notify::devices", refresh)
-  bluetooth.connect("notify::is-powered", refresh)
-  bluetooth.connect("notify::is-connected", refresh)
-  bluetooth.connect("adapter-added", refresh)
-  bluetooth.connect("adapter-removed", refresh)
-  bluetooth.connect("device-added", (_service, device) => {
-    connectBluetoothDeviceSignals(device, refresh)
-    refresh()
-  })
-  bluetooth.connect("device-removed", refresh)
+  const deviceSignals: Array<readonly [BluetoothDevice, number]> = []
+  const bluetoothSignals = [
+    bluetooth.connect("notify::adapter", refresh),
+    bluetooth.connect("notify::adapters", refresh),
+    bluetooth.connect("notify::devices", refresh),
+    bluetooth.connect("notify::is-powered", refresh),
+    bluetooth.connect("notify::is-connected", refresh),
+    bluetooth.connect("adapter-added", refresh),
+    bluetooth.connect("adapter-removed", refresh),
+    bluetooth.connect("device-added", (_service, device) => {
+      deviceSignals.push(
+        ...connectBluetoothDeviceSignals(device, refresh).map((signal) => [device, signal] as const),
+      )
+      refresh()
+    }),
+    bluetooth.connect("device-removed", refresh),
+  ]
 
-  for (const device of bluetooth.devices ?? []) connectBluetoothDeviceSignals(device, refresh)
+  for (const device of bluetooth.devices ?? []) {
+    deviceSignals.push(
+      ...connectBluetoothDeviceSignals(device, refresh).map((signal) => [device, signal] as const),
+    )
+  }
+
+  return () => {
+    for (const signal of bluetoothSignals) bluetooth.disconnect(signal)
+    for (const [device, signal] of deviceSignals) device.disconnect(signal)
+  }
 }
 
 export function connectBluetoothDeviceSignals(device: BluetoothDevice, refresh: () => void) {
-  device.connect("notify::alias", refresh)
-  device.connect("notify::connected", refresh)
-  device.connect("notify::connecting", refresh)
-  device.connect("notify::paired", refresh)
-  device.connect("notify::battery-percentage", refresh)
+  return [
+    device.connect("notify::alias", refresh),
+    device.connect("notify::connected", refresh),
+    device.connect("notify::connecting", refresh),
+    device.connect("notify::paired", refresh),
+    device.connect("notify::battery-percentage", refresh),
+  ]
 }
 
 export function bluetoothDeviceName(device: BluetoothDevice) {

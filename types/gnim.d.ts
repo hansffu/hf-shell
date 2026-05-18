@@ -21,6 +21,7 @@ declare module "gnim" {
 
   export function createComputed<T = unknown>(producer: () => T): Accessor<T>
   export function createState<T>(initial: T): [Accessor<T>, Setter<T>]
+  export function onCleanup(cleanup: () => void): void
 
   export function For<Item = unknown>({
     each,

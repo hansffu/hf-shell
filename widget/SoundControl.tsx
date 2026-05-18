@@ -1,7 +1,8 @@
 import { Astal, Gtk } from "ags/gtk4"
 import AstalWp from "gi://AstalWp"
+import { createState, onCleanup } from "gnim"
+import { PanelPopover } from "./LazyPopoverContent"
 import Panel, { PanelSection } from "./Panel"
-import { setupPanelPopover } from "./PanelRevealer"
 import Select, { type SelectControl } from "./Select"
 
 const wp = AstalWp.get_default()
@@ -109,6 +110,7 @@ function iconName(icon: string, muted: boolean) {
 }
 
 function connectEndpointSignals(kind: EndpointKind, sync: () => void) {
+  const audioSignals: number[] = []
   let endpointSignals: Array<[AstalWp.Endpoint, number]> = []
 
   const disconnectEndpointSignals = () => {
@@ -149,16 +151,25 @@ function connectEndpointSignals(kind: EndpointKind, sync: () => void) {
   }
 
   if (kind === "speaker") {
-    audio.connect("notify::default-speaker", refresh)
-    audio.connect("speaker-added", refresh)
-    audio.connect("speaker-removed", refresh)
+    audioSignals.push(
+      audio.connect("notify::default-speaker", refresh),
+      audio.connect("speaker-added", refresh),
+      audio.connect("speaker-removed", refresh),
+    )
   } else {
-    audio.connect("notify::default-microphone", refresh)
-    audio.connect("microphone-added", refresh)
-    audio.connect("microphone-removed", refresh)
+    audioSignals.push(
+      audio.connect("notify::default-microphone", refresh),
+      audio.connect("microphone-added", refresh),
+      audio.connect("microphone-removed", refresh),
+    )
   }
 
   bindEndpointSignals()
+
+  onCleanup(() => {
+    disconnectEndpointSignals()
+    for (const signal of audioSignals) audio.disconnect(signal)
+  })
 }
 
 function setupDeviceDropdown(
@@ -213,7 +224,7 @@ function setupDeviceDropdown(
     sync()
   }
 
-  dropdown.connect("notify::selected", (select) => {
+  const selectedSignal = dropdown.connect("notify::selected", (select) => {
     if (syncing) return
 
     const endpoint = endpoints[select.selected]
@@ -226,6 +237,11 @@ function setupDeviceDropdown(
 
   connectEndpointSignals(kind, refresh)
   refresh()
+
+  onCleanup(() => {
+    disconnectEndpoints()
+    dropdown.disconnect(selectedSignal)
+  })
 }
 
 function setupProfileDropdown(
@@ -284,7 +300,7 @@ function setupProfileDropdown(
     syncing = false
   }
 
-  dropdown.connect("notify::selected", (select) => {
+  const selectedSignal = dropdown.connect("notify::selected", (select) => {
     if (syncing || !device) return
 
     const profile = profiles[select.selected]
@@ -297,6 +313,11 @@ function setupProfileDropdown(
 
   connectEndpointSignals(kind, refresh)
   refresh()
+
+  onCleanup(() => {
+    disconnectDevice()
+    dropdown.disconnect(selectedSignal)
+  })
 
   return refresh
 }
@@ -340,6 +361,8 @@ function setupSoundButton(button: Gtk.MenuButton, controls: SoundButtonControls)
   button.add_controller(scroll)
   connectEndpointSignals("speaker", bindSpeaker)
   bindSpeaker()
+
+  onCleanup(disconnectSpeaker)
 }
 
 function setupAudioRow(kind: EndpointKind, icon: string, controls: AudioRowControls) {
@@ -380,16 +403,22 @@ function setupAudioRow(kind: EndpointKind, icon: string, controls: AudioRowContr
     update()
   }
 
-  controls.slider.connect("notify::value", () => {
+  const sliderSignal = controls.slider.connect("notify::value", () => {
     if (!syncingSlider) setEndpointVolume(endpoint, controls.slider.value)
   })
 
-  controls.muteButton.connect("clicked", () => endpoint.set_mute(!endpoint.mute))
+  const muteSignal = controls.muteButton.connect("clicked", () => endpoint.set_mute(!endpoint.mute))
   const refreshProfiles = setupProfileDropdown(controls.profileRow, controls.profileDropdown, kind)
 
   setupDeviceDropdown(controls.dropdown, kind, refreshProfiles)
   connectEndpointSignals(kind, bindEndpoint)
   bindEndpoint()
+
+  onCleanup(() => {
+    disconnectEndpoint()
+    controls.slider.disconnect(sliderSignal)
+    controls.muteButton.disconnect(muteSignal)
+  })
 }
 
 function DeviceDropdown({ onReady }: { onReady: (dropdown: SelectControl) => void }) {
@@ -529,6 +558,7 @@ function AudioRow({
 }
 
 export default function SoundControl() {
+  const [open, setOpen] = createState(false)
   let controls: Partial<SoundButtonControls> = {}
   let menuButton: Gtk.MenuButton | null = null
   let setupDone = false
@@ -547,6 +577,7 @@ export default function SoundControl() {
     <menubutton
       class="sound-control"
       direction={Gtk.ArrowType.RIGHT}
+      onNotifyActive={(button: Gtk.MenuButton) => setOpen(button.active)}
       $={(button) => {
         menuButton = button
         maybeSetup()
@@ -570,11 +601,8 @@ export default function SoundControl() {
           }}
         />
       </box>
-      <popover
-        $={(popover: Gtk.Popover) => {
-          setupPanelPopover(popover)
-        }}
-      >
+      <PanelPopover open={open} setOpen={setOpen}>
+        {() => (
         <Panel
           title="Sound"
           class="sound-menu"
@@ -587,7 +615,8 @@ export default function SoundControl() {
             <AudioRow kind="microphone" icon="audio-input-microphone-symbolic" title="Input" />
           </PanelSection>
         </Panel>
-      </popover>
+        )}
+      </PanelPopover>
     </menubutton>
   )
 }

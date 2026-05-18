@@ -1,5 +1,6 @@
 import { Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
+import { createState, onCleanup } from "gnim"
 import {
   type NetworkState,
   type VpnConnection,
@@ -15,8 +16,8 @@ import {
   rescanWifi,
   setWifiEnabled,
 } from "../service/Network"
+import { PanelPopover } from "./LazyPopoverContent"
 import Panel, { PanelSection } from "./Panel"
-import { setupPanelPopover } from "./PanelRevealer"
 
 type NetworkButtonControls = {
   icon: Gtk.Image
@@ -25,7 +26,6 @@ type NetworkButtonControls = {
 
 type NetworkListControls = {
   list: Gtk.Box
-  popover: Gtk.Popover
   statusLabel: Gtk.Label
   vpnList: Gtk.Box
   wifiSwitch: Gtk.Switch
@@ -160,11 +160,13 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
   }
 
   button.connect("map", refresh)
-  connectNetworkStateSignals(refresh)
+  const disconnectStateSignals = connectNetworkStateSignals(refresh)
   controls.icon.set_from_icon_name("network-wireless-symbolic")
   controls.label.set_label("")
   button.set_tooltip_text("Network")
   refresh()
+
+  onCleanup(disconnectStateSignals)
 }
 
 function summaryStatusText(state: Awaited<ReturnType<typeof getNetworkSummaryAsync>>) {
@@ -177,7 +179,6 @@ function summaryStatusText(state: Awaited<ReturnType<typeof getNetworkSummaryAsy
 }
 
 function setupNetworkList(controls: NetworkListControls) {
-  let visible = controls.popover.visible
   let currentState: NetworkState | null = null
   let requestId = 0
   let syncingSwitch = false
@@ -232,13 +233,13 @@ function setupNetworkList(controls: NetworkListControls) {
     if (loading) showLoading()
     void getNetworkStateAsync()
       .then((state) => {
-        if (id !== requestId || !visible) return
+        if (id !== requestId) return
 
         render(state)
       })
       .catch((error) => {
         void error
-        if (id !== requestId || !visible) return
+        if (id !== requestId) return
 
         controls.statusLabel.set_label("Network unavailable")
         controls.wifiSwitch.set_sensitive(false)
@@ -249,25 +250,11 @@ function setupNetworkList(controls: NetworkListControls) {
       })
   }
 
-  connectNetworkStateSignals(() => {
-    if (visible) refresh(false)
-  })
-  controls.popover.connect("notify::visible", () => {
-    visible = controls.popover.visible
-
-    if (visible) {
-      GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-        if (visible) refresh(false)
-
-        return GLib.SOURCE_REMOVE
-      })
-    }
-  })
-  controls.popover.connect("closed", () => {
-    visible = controls.popover.visible
+  const disconnectStateSignals = connectNetworkStateSignals(() => {
+    refresh(false)
   })
 
-  controls.wifiSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
+  const switchSignal = controls.wifiSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
     if (syncingSwitch || !currentState) return
 
     const state = currentState
@@ -279,6 +266,11 @@ function setupNetworkList(controls: NetworkListControls) {
   })
 
   showLoading()
+
+  onCleanup(() => {
+    disconnectStateSignals()
+    controls.wifiSwitch.disconnect(switchSignal)
+  })
 
   return refresh
 }
@@ -362,6 +354,7 @@ function createVpnRow(connection: VpnConnection, onRefresh: () => void) {
 }
 
 export default function NetworkControl() {
+  const [open, setOpen] = createState(false)
   let buttonControls: Partial<NetworkButtonControls> = {}
   let listControls: Partial<NetworkListControls> = {}
   let menuButton: Gtk.MenuButton | null = null
@@ -383,7 +376,6 @@ export default function NetworkControl() {
     if (
       listSetupDone ||
       !listControls.list ||
-      !listControls.popover ||
       !listControls.statusLabel ||
       !listControls.vpnList ||
       !listControls.wifiSwitch
@@ -394,17 +386,29 @@ export default function NetworkControl() {
     listSetupDone = true
     refreshList = setupNetworkList({
       list: listControls.list,
-      popover: listControls.popover,
       statusLabel: listControls.statusLabel,
       vpnList: listControls.vpnList,
       wifiSwitch: listControls.wifiSwitch,
     })
   }
 
+  const setPanelOpen = (next: boolean | ((current: boolean) => boolean)) => {
+    const openNext = typeof next === "function" ? next(open()) : next
+
+    if (!openNext) {
+      listControls = {}
+      listSetupDone = false
+      refreshList = null
+    }
+
+    setOpen(openNext)
+  }
+
   return (
     <menubutton
       class="network-control"
       direction={Gtk.ArrowType.RIGHT}
+      onNotifyActive={(button: Gtk.MenuButton) => setPanelOpen(button.active)}
       $={(button) => {
         menuButton = button
         maybeSetupButton()
@@ -428,13 +432,8 @@ export default function NetworkControl() {
           }}
         />
       </box>
-      <popover
-        $={(popover: Gtk.Popover) => {
-          listControls = { ...listControls, popover }
-          setupPanelPopover(popover)
-          maybeSetupList()
-        }}
-      >
+      <PanelPopover open={open} setOpen={setPanelOpen}>
+        {() => (
         <Panel
           title="Network"
           class="network-menu"
@@ -513,7 +512,8 @@ export default function NetworkControl() {
             </scrolledwindow>
           </PanelSection>
         </Panel>
-      </popover>
+        )}
+      </PanelPopover>
     </menubutton>
   )
 }

@@ -1,6 +1,6 @@
 import { Gdk, Gtk } from "ags/gtk4"
 import { createPoll } from "ags/time"
-import { createComputed } from "gnim"
+import { createComputed, createState } from "gnim"
 import {
   CaptureFormat,
   CaptureScope,
@@ -12,7 +12,7 @@ import {
   startScreenCapture,
 } from "../service/ScreenToolkit"
 import Panel, { PanelSection } from "./Panel"
-import { setupPanelPopover } from "./PanelRevealer"
+import { PanelPopover } from "./LazyPopoverContent"
 
 type Tool = {
   command: ScreenToolkitCommand
@@ -195,10 +195,10 @@ function ChoiceButton({
 }
 
 function CaptureMenu({ onStart }: { onStart: () => void }) {
+  const [open, setOpen] = createState(false)
   let format: CaptureFormat = "mp4"
   let scope: CaptureScope = "region"
   let duration = 0
-  let popover: Gtk.Popover | null = null
   const formatButtons = new Map<CaptureFormat, Gtk.Button>()
   const scopeButtons = new Map<CaptureScope, Gtk.Button>()
   const durationButtons = new Map<number, Gtk.Button>()
@@ -222,24 +222,23 @@ function CaptureMenu({ onStart }: { onStart: () => void }) {
   }
 
   const start = () => {
-    popover?.popdown()
+    setOpen(false)
     onStart()
     startScreenCapture(format, scope, duration)
   }
 
   return (
-    <menubutton class="screen-capture" direction={Gtk.ArrowType.RIGHT}>
+    <menubutton
+      class="screen-capture"
+      direction={Gtk.ArrowType.RIGHT}
+      onNotifyActive={(button: Gtk.MenuButton) => setOpen(button.active)}
+    >
       <box orientation={Gtk.Orientation.HORIZONTAL}>
         <image iconName="media-record-symbolic" pixelSize={16} useFallback />
         <label label="Capture" />
       </box>
-      <popover
-        $={(widget: Gtk.Popover) => {
-          popover = widget
-          setupPanelPopover(widget)
-        }}
-      >
-        <Panel title="Screen Capture" class="screen-capture-menu">
+      <PanelPopover open={open} setOpen={setOpen}>
+        {(close) => <Panel title="Screen Capture" class="screen-capture-menu">
           <PanelSection title="Format" class="screen-toolkit-picker">
             <box class="screen-toolkit-choice-row" orientation={Gtk.Orientation.HORIZONTAL}>
               {formatOptions.map((option) => (
@@ -288,7 +287,10 @@ function CaptureMenu({ onStart }: { onStart: () => void }) {
           <button
             class="screen-capture-start"
             $={(button) => {
-              button.connect("clicked", start)
+              button.connect("clicked", () => {
+                close()
+                start()
+              })
             }}
           >
             <box orientation={Gtk.Orientation.HORIZONTAL}>
@@ -296,8 +298,8 @@ function CaptureMenu({ onStart }: { onStart: () => void }) {
               <label label="Start" />
             </box>
           </button>
-        </Panel>
-      </popover>
+        </Panel>}
+      </PanelPopover>
     </menubutton>
   )
 }
@@ -326,35 +328,36 @@ export function ScreenCaptureStopButton() {
 }
 
 export default function ScreenToolkit({ gdkmonitor }: { gdkmonitor: Gdk.Monitor }) {
-  let popover: Gtk.Popover | null = null
-
-  const close = () => popover?.popdown()
+  const [open, setOpen] = createState(false)
+  let closePopover = () => setOpen(false)
 
   const run = (command: ScreenToolkitCommand) => {
-    close()
+    closePopover()
     runScreenToolkit(command)
   }
 
   const runPinRegion = () => {
-    close()
+    closePopover()
     pinRegion(gdkmonitor)
   }
 
   const runPinImage = () => {
-    close()
+    closePopover()
     pinImage(gdkmonitor)
   }
 
   return (
-    <menubutton class="screen-toolkit" direction={Gtk.ArrowType.RIGHT}>
+    <menubutton
+      class="screen-toolkit"
+      direction={Gtk.ArrowType.RIGHT}
+      onNotifyActive={(button: Gtk.MenuButton) => setOpen(button.active)}
+    >
       <image iconName="applets-screenshooter-symbolic" pixelSize={17} useFallback />
-      <popover
-        $={(widget: Gtk.Popover) => {
-          popover = widget
-          setupPanelPopover(widget)
-        }}
-      >
-        <Panel title="Screen Toolkit" class="screen-toolkit-menu">
+      <PanelPopover open={open} setOpen={setOpen}>
+        {(close) => {
+          closePopover = close
+
+          return <Panel title="Screen Toolkit" class="screen-toolkit-menu">
           <ToolSection title="Screenshot" tools={screenshotTools} onCommand={run} />
 
           <PanelSection title="Pin">
@@ -376,10 +379,11 @@ export default function ScreenToolkit({ gdkmonitor }: { gdkmonitor: Gdk.Monitor 
 
           <ToolSection title="Analyze" tools={analysisTools} onCommand={run} />
           <PanelSection title="Screen Capture">
-            <CaptureMenu onStart={close} />
+            <CaptureMenu onStart={closePopover} />
           </PanelSection>
         </Panel>
-      </popover>
+        }}
+      </PanelPopover>
     </menubutton>
   )
 }

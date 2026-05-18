@@ -1,5 +1,6 @@
 import { Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
+import { createState, onCleanup } from "gnim"
 import {
   type BluetoothAudioCard,
   type BluetoothDevice,
@@ -14,8 +15,8 @@ import {
   setBluetoothPowered,
   setBluetoothAudioProfile,
 } from "../service/Bluetooth"
+import { PanelPopover } from "./LazyPopoverContent"
 import Panel, { PanelSection } from "./Panel"
-import { setupPanelPopover } from "./PanelRevealer"
 import Select, { type SelectControl } from "./Select"
 
 type BluetoothButtonControls = {
@@ -137,8 +138,10 @@ function setupBluetoothButton(button: Gtk.MenuButton, controls: BluetoothButtonC
   }
 
   button.connect("map", refresh)
-  connectBluetoothStateSignals(refresh)
+  const disconnectStateSignals = connectBluetoothStateSignals(refresh)
   refresh()
+
+  onCleanup(disconnectStateSignals)
 }
 
 function setupBluetoothList(controls: BluetoothListControls) {
@@ -169,9 +172,9 @@ function setupBluetoothList(controls: BluetoothListControls) {
     }
   }
 
-  connectBluetoothStateSignals(refresh)
+  const disconnectStateSignals = connectBluetoothStateSignals(refresh)
 
-  controls.powerSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
+  const powerSignal = controls.powerSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
     const state = getBluetoothState()
 
     if (!state.adapterAvailable || toggle.active === state.powered) return
@@ -181,6 +184,11 @@ function setupBluetoothList(controls: BluetoothListControls) {
   })
 
   refresh()
+
+  onCleanup(() => {
+    disconnectStateSignals()
+    controls.powerSwitch.disconnect(powerSignal)
+  })
 }
 
 function setupProfileDropdown(
@@ -292,6 +300,7 @@ function createBluetoothDeviceRow(device: BluetoothDevice, onRefresh: () => void
 }
 
 export default function BluetoothControl() {
+  const [open, setOpen] = createState(false)
   let buttonControls: Partial<BluetoothButtonControls> = {}
   let listControls: Partial<BluetoothListControls> = {}
   let menuButton: Gtk.MenuButton | null = null
@@ -328,10 +337,22 @@ export default function BluetoothControl() {
     })
   }
 
+  const setPanelOpen = (next: boolean | ((current: boolean) => boolean)) => {
+    const openNext = typeof next === "function" ? next(open()) : next
+
+    if (!openNext) {
+      listControls = {}
+      listSetupDone = false
+    }
+
+    setOpen(openNext)
+  }
+
   return (
     <menubutton
       class="bluetooth-control"
       direction={Gtk.ArrowType.RIGHT}
+      onNotifyActive={(button: Gtk.MenuButton) => setPanelOpen(button.active)}
       $={(button) => {
         menuButton = button
         maybeSetupButton()
@@ -355,11 +376,8 @@ export default function BluetoothControl() {
           }}
         />
       </box>
-      <popover
-        $={(popover: Gtk.Popover) => {
-          setupPanelPopover(popover)
-        }}
-      >
+      <PanelPopover open={open} setOpen={setPanelOpen}>
+        {() => (
         <Panel
           title="Bluetooth"
           class="bluetooth-menu"
@@ -412,7 +430,8 @@ export default function BluetoothControl() {
             />
           </PanelSection>
         </Panel>
-      </popover>
+        )}
+      </PanelPopover>
     </menubutton>
   )
 }
