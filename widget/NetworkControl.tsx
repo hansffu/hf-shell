@@ -2,16 +2,21 @@ import { Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
 import { createState, onCleanup } from "gnim"
 import {
-  type NetworkState,
   type VpnConnection,
+  type VpnNetworkState,
   type WifiAccessPoint,
+  type WifiNetworkState,
+  type WiredConnection,
+  type WiredNetworkState,
   getNetworkSummaryAsync,
   connectNetworkStateSignals,
   connectVpn,
   connectWifi,
   disconnectVpn,
   disconnectWifi,
-  getNetworkStateAsync,
+  getVpnNetworkStateAsync,
+  getWifiNetworkStateAsync,
+  getWiredNetworkStateAsync,
   openNetworkManager,
   rescanWifi,
   setWifiEnabled,
@@ -25,11 +30,14 @@ type NetworkButtonControls = {
 }
 
 type NetworkListControls = {
+  ethernetList: Gtk.Box
   list: Gtk.Box
   statusLabel: Gtk.Label
   vpnList: Gtk.Box
   wifiSwitch: Gtk.Switch
 }
+
+type NetworkSummary = Awaited<ReturnType<typeof getNetworkSummaryAsync>>
 
 function clearBox(box: Gtk.Box) {
   let child = box.get_first_child()
@@ -89,11 +97,11 @@ function vpnLabel(count: number) {
   return `${count} VPN`
 }
 
-function statusText(state: NetworkState) {
+function wifiStatusText(state: WifiNetworkState) {
   if (!state.networkingEnabled) return "Networking disabled"
+  if (state.activeWifi) return state.activeWifi.ssid
   if (!state.wifiDevice) return "Wi-Fi unavailable"
   if (!state.wifiEnabled) return "Wi-Fi disabled"
-  if (state.activeWifi) return state.activeWifi.ssid
 
   return "Not connected"
 }
@@ -120,6 +128,13 @@ function createEmptyState(iconName: string, label: string) {
   return box
 }
 
+function networkIconName(state: NetworkSummary) {
+  if (state.activeWifiName) return "network-wireless-symbolic"
+  if (state.activeWiredName) return "network-wired-symbolic"
+
+  return "network-wireless-offline-symbolic"
+}
+
 function setupListScroller(scroller: Gtk.ScrolledWindow, minHeight: number, maxHeight: number) {
   scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
   scroller.set_min_content_height(minHeight)
@@ -138,9 +153,7 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
         if (id !== requestId) return
 
         controls.icon.set_from_icon_name(
-          state.wifiEnabled && state.activeWifiName
-            ? "network-wireless-symbolic"
-            : "network-wireless-offline-symbolic",
+          state.networkingEnabled ? networkIconName(state) : "network-wireless-offline-symbolic",
         )
         controls.label.set_label(vpnLabel(state.activeVpnCount))
         button.set_tooltip_text(
@@ -169,44 +182,69 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
   onCleanup(disconnectStateSignals)
 }
 
-function summaryStatusText(state: Awaited<ReturnType<typeof getNetworkSummaryAsync>>) {
+function summaryStatusText(state: NetworkSummary) {
   if (!state.networkingEnabled) return "Networking disabled"
+  if (state.activeWifiName) return state.activeWifiName
+  if (state.activeWiredName) return `Ethernet: ${state.activeWiredName}`
   if (!state.wifiDevice) return "Wi-Fi unavailable"
   if (!state.wifiEnabled) return "Wi-Fi disabled"
-  if (state.activeWifiName) return state.activeWifiName
 
   return "Not connected"
 }
 
 function setupNetworkList(controls: NetworkListControls) {
-  let currentState: NetworkState | null = null
-  let requestId = 0
+  let currentWifiState: WifiNetworkState | null = null
+  let summaryRequestId = 0
+  let wiredRequestId = 0
+  let wifiRequestId = 0
+  let vpnRequestId = 0
   let syncingSwitch = false
 
-  const showLoading = () => {
+  const showSummaryLoading = () => {
     controls.statusLabel.set_label("Loading")
+  }
+
+  const showWiredLoading = () => {
+    clearBox(controls.ethernetList)
+    controls.ethernetList.append(createEmptyState("network-wired-symbolic", "Loading Ethernet"))
+  }
+
+  const showWifiLoading = () => {
     controls.wifiSwitch.set_sensitive(false)
     clearBox(controls.list)
-    clearBox(controls.vpnList)
     controls.list.append(createEmptyState("network-wireless-symbolic", "Loading networks"))
+  }
+
+  const showVpnLoading = () => {
+    clearBox(controls.vpnList)
     controls.vpnList.append(createEmptyState("network-vpn-symbolic", "Loading VPN profiles"))
   }
 
-  const render = (state: NetworkState) => {
-    currentState = state
-    controls.statusLabel.set_label(statusText(state))
+  const renderWired = (state: WiredNetworkState) => {
+    clearBox(controls.ethernetList)
+
+    if (!state.networkingEnabled) {
+      controls.ethernetList.append(createEmptyState("network-wired-disconnected-symbolic", "Networking disabled"))
+    } else if (state.activeWired) {
+      controls.ethernetList.append(createWiredRow(state.activeWired))
+    } else {
+      controls.ethernetList.append(createEmptyState("network-wired-disconnected-symbolic", "No Ethernet connection"))
+    }
+  }
+
+  const renderWifi = (state: WifiNetworkState) => {
+    currentWifiState = state
     syncingSwitch = true
     controls.wifiSwitch.set_active(state.wifiEnabled)
     syncingSwitch = false
     controls.wifiSwitch.set_sensitive(state.networkingEnabled && Boolean(state.wifiDevice))
     clearBox(controls.list)
-    clearBox(controls.vpnList)
 
     if (!state.networkingEnabled || !state.wifiDevice || !state.wifiEnabled) {
       controls.list.append(
         createEmptyState(
           state.wifiDevice ? "network-wireless-offline-symbolic" : "dialog-warning-symbolic",
-          statusText(state),
+          wifiStatusText(state),
         ),
       )
     } else if (state.wifiAccessPoints.length === 0) {
@@ -216,7 +254,10 @@ function setupNetworkList(controls: NetworkListControls) {
         controls.list.append(createWifiRow(accessPoint, state.wifiDevice, refresh))
       }
     }
+  }
 
+  const renderVpn = (state: VpnNetworkState) => {
+    clearBox(controls.vpnList)
     if (state.vpnConnections.length === 0) {
       controls.vpnList.append(createEmptyState("network-vpn-symbolic", "No VPN profiles"))
     } else {
@@ -224,30 +265,89 @@ function setupNetworkList(controls: NetworkListControls) {
         controls.vpnList.append(createVpnRow(connection, refresh))
       }
     }
-
   }
 
-  const refresh = (loading = currentState === null) => {
-    const id = ++requestId
+  const refreshSummary = (loading: boolean) => {
+    const id = ++summaryRequestId
 
-    if (loading) showLoading()
-    void getNetworkStateAsync()
+    if (loading) showSummaryLoading()
+    void getNetworkSummaryAsync()
       .then((state) => {
-        if (id !== requestId) return
+        if (id !== summaryRequestId) return
 
-        render(state)
+        controls.statusLabel.set_label(summaryStatusText(state))
       })
       .catch((error) => {
         void error
-        if (id !== requestId) return
+        if (id !== summaryRequestId) return
 
         controls.statusLabel.set_label("Network unavailable")
+      })
+  }
+
+  const refreshWired = (loading: boolean) => {
+    const id = ++wiredRequestId
+
+    if (loading) showWiredLoading()
+    void getWiredNetworkStateAsync()
+      .then((state) => {
+        if (id !== wiredRequestId) return
+
+        renderWired(state)
+      })
+      .catch((error) => {
+        void error
+        if (id !== wiredRequestId) return
+
+        clearBox(controls.ethernetList)
+        controls.ethernetList.append(createEmptyState("dialog-warning-symbolic", "Ethernet unavailable"))
+      })
+  }
+
+  const refreshWifi = (loading: boolean) => {
+    const id = ++wifiRequestId
+
+    if (loading) showWifiLoading()
+    void getWifiNetworkStateAsync()
+      .then((state) => {
+        if (id !== wifiRequestId) return
+
+        renderWifi(state)
+      })
+      .catch((error) => {
+        void error
+        if (id !== wifiRequestId) return
+
         controls.wifiSwitch.set_sensitive(false)
         clearBox(controls.list)
-        clearBox(controls.vpnList)
         controls.list.append(createEmptyState("dialog-warning-symbolic", "NetworkManager did not respond"))
+      })
+  }
+
+  const refreshVpn = (loading: boolean) => {
+    const id = ++vpnRequestId
+
+    if (loading) showVpnLoading()
+    void getVpnNetworkStateAsync()
+      .then((state) => {
+        if (id !== vpnRequestId) return
+
+        renderVpn(state)
+      })
+      .catch((error) => {
+        void error
+        if (id !== vpnRequestId) return
+
+        clearBox(controls.vpnList)
         controls.vpnList.append(createEmptyState("network-vpn-symbolic", "VPN unavailable"))
       })
+  }
+
+  const refresh = (loading = currentWifiState === null) => {
+    refreshSummary(loading)
+    refreshWired(loading)
+    refreshWifi(loading)
+    refreshVpn(loading)
   }
 
   const disconnectStateSignals = connectNetworkStateSignals(() => {
@@ -255,17 +355,24 @@ function setupNetworkList(controls: NetworkListControls) {
   })
 
   const switchSignal = controls.wifiSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
-    if (syncingSwitch || !currentState) return
+    if (syncingSwitch || !currentWifiState) return
 
-    const state = currentState
+    const state = currentWifiState
 
     if (!state.networkingEnabled || !state.wifiDevice || toggle.active === state.wifiEnabled) return
 
     setWifiEnabled(toggle.active)
-    refreshSoon(() => refresh(true))
+    refreshSoon(() => {
+      refreshSummary(true)
+      refreshWifi(true)
+    })
   })
 
-  showLoading()
+  showSummaryLoading()
+  showWiredLoading()
+  showWifiLoading()
+  showVpnLoading()
+  refresh(false)
 
   onCleanup(() => {
     disconnectStateSignals()
@@ -308,6 +415,28 @@ function createWifiRow(accessPoint: WifiAccessPoint, wifiDevice: string | null, 
   buttonContent.append(createLabel(accessPoint.active ? "Disconnect" : "Connect"))
   button.set_child(buttonContent)
   row.append(button)
+
+  return row
+}
+
+function createWiredRow(connection: WiredConnection) {
+  const row = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
+  const labels = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
+
+  addClasses(row, "network-row active")
+  addClasses(labels, "network-row-labels")
+  labels.set_hexpand(true)
+
+  row.append(createImage("network-wired-symbolic", 18))
+  labels.append(createLabel(connection.name, "network-row-name", 0))
+  labels.append(
+    createLabel(
+      connection.device ? `Ethernet connected on ${connection.device}` : "Ethernet connected",
+      "network-row-status",
+      0,
+    ),
+  )
+  row.append(labels)
 
   return row
 }
@@ -377,6 +506,7 @@ export default function NetworkControl() {
       listSetupDone ||
       !listControls.list ||
       !listControls.statusLabel ||
+      !listControls.ethernetList ||
       !listControls.vpnList ||
       !listControls.wifiSwitch
     ) {
@@ -385,6 +515,7 @@ export default function NetworkControl() {
 
     listSetupDone = true
     refreshList = setupNetworkList({
+      ethernetList: listControls.ethernetList,
       list: listControls.list,
       statusLabel: listControls.statusLabel,
       vpnList: listControls.vpnList,
@@ -416,7 +547,7 @@ export default function NetworkControl() {
     >
       <box class="network-control-content" orientation={Gtk.Orientation.VERTICAL}>
         <image
-          iconName="network-wireless-symbolic"
+          iconName="network-wired-symbolic"
           pixelSize={17}
           useFallback
           $={(image) => {
@@ -477,6 +608,16 @@ export default function NetworkControl() {
               <image iconName="preferences-system-network-symbolic" pixelSize={16} useFallback />
             </button>
           </box>
+          <PanelSection title="Ethernet">
+            <box
+              class="network-ethernet-list"
+              orientation={Gtk.Orientation.VERTICAL}
+              $={(box) => {
+                listControls = { ...listControls, ethernetList: box }
+                maybeSetupList()
+              }}
+            />
+          </PanelSection>
           <PanelSection title="Wi-Fi">
             <scrolledwindow
               class="network-scroll network-wifi-scroll"

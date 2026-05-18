@@ -16,7 +16,14 @@ export type VpnConnection = {
   type: string
 }
 
+export type WiredConnection = {
+  device: string
+  name: string
+  type: string
+}
+
 export type NetworkState = {
+  activeWired: WiredConnection | null
   activeWifi: WifiAccessPoint | null
   connectivity: string
   networkingEnabled: boolean
@@ -28,10 +35,28 @@ export type NetworkState = {
 
 export type NetworkSummary = {
   activeVpnCount: number
+  activeWiredName: string | null
   activeWifiName: string | null
   networkingEnabled: boolean
   wifiDevice: string | null
   wifiEnabled: boolean
+}
+
+export type WiredNetworkState = {
+  activeWired: WiredConnection | null
+  networkingEnabled: boolean
+}
+
+export type WifiNetworkState = {
+  activeWifi: WifiAccessPoint | null
+  networkingEnabled: boolean
+  wifiAccessPoints: WifiAccessPoint[]
+  wifiDevice: string | null
+  wifiEnabled: boolean
+}
+
+export type VpnNetworkState = {
+  vpnConnections: VpnConnection[]
 }
 
 type ActiveConnection = {
@@ -153,6 +178,12 @@ function normalizeType(type: string) {
 
 function isWifiType(type: string) {
   return normalizeType(type).includes("wireless") || normalizeType(type) === "wifi"
+}
+
+function isWiredType(type: string) {
+  const lower = normalizeType(type)
+
+  return lower === "ethernet" || lower.includes("ethernet") || lower === "802-3-ethernet"
 }
 
 function isVpnType(type: string) {
@@ -373,6 +404,18 @@ function getVpnConnections(saved: SavedConnection[], active: ActiveConnection[])
     .sort((left, right) => Number(right.active) - Number(left.active) || left.name.localeCompare(right.name))
 }
 
+function getActiveWired(active: ActiveConnection[]): WiredConnection | null {
+  const connection = active.find((item) => isWiredType(item.type))
+
+  if (!connection) return null
+
+  return {
+    device: connection.device,
+    name: connection.name,
+    type: connection.type,
+  }
+}
+
 export function getNetworkState(): NetworkState {
   const saved = getSavedConnections()
   const active = getActiveConnections()
@@ -381,6 +424,7 @@ export function getNetworkState(): NetworkState {
   const activeWifi = wifiAccessPoints.find((accessPoint) => accessPoint.active) ?? null
 
   return {
+    activeWired: getActiveWired(active),
     activeWifi,
     connectivity: getConnectivity(),
     networkingEnabled: getNetworkingState(),
@@ -406,6 +450,7 @@ export async function getNetworkStateAsync(): Promise<NetworkState> {
   const vpnConnections = getVpnConnections(saved, active)
 
   return {
+    activeWired: getActiveWired(active),
     activeWifi,
     connectivity,
     networkingEnabled,
@@ -416,32 +461,104 @@ export async function getNetworkStateAsync(): Promise<NetworkState> {
   }
 }
 
+export async function getWiredNetworkStateAsync(): Promise<WiredNetworkState> {
+  const [active, networkingEnabled] = await Promise.all([
+    getActiveConnectionsAsync(),
+    nmcliAsync(["networking"]).then((state) => state === "enabled"),
+  ])
+
+  return {
+    activeWired: getActiveWired(active),
+    networkingEnabled,
+  }
+}
+
+export async function getWifiNetworkStateAsync(): Promise<WifiNetworkState> {
+  const [saved, active, networkingEnabled, wifiDevice, wifiEnabled] = await Promise.all([
+    getSavedConnectionsAsync(),
+    getActiveConnectionsAsync(),
+    nmcliAsync(["networking"]).then((state) => state === "enabled"),
+    getWifiDeviceAsync(),
+    nmcliAsync(["radio", "wifi"]).then((state) => state === "enabled"),
+  ])
+  const knownWifi = await getKnownWifiMapAsync(saved)
+  const wifiAccessPoints =
+    networkingEnabled && wifiDevice && wifiEnabled ? await getWifiAccessPointsAsync(knownWifi, active) : []
+  const activeWifi = wifiAccessPoints.find((accessPoint) => accessPoint.active) ?? null
+
+  return {
+    activeWifi,
+    networkingEnabled,
+    wifiAccessPoints,
+    wifiDevice,
+    wifiEnabled,
+  }
+}
+
+export async function getVpnNetworkStateAsync(): Promise<VpnNetworkState> {
+  const [saved, active] = await Promise.all([getSavedConnectionsAsync(), getActiveConnectionsAsync()])
+
+  return {
+    vpnConnections: getVpnConnections(saved, active),
+  }
+}
+
 export function getNetworkSummary(): NetworkSummary {
   const active = getActiveConnections()
   const activeWifi = active.find((connection) => isWifiType(connection.type))
+  const activeWired = getActiveWired(active)
+  const networkingEnabled = getNetworkingState()
+
+  if (!networkingEnabled || activeWifi || activeWired) {
+    return {
+      activeVpnCount: active.filter((connection) => isVpnType(connection.type)).length,
+      activeWiredName: activeWired?.name ?? null,
+      activeWifiName: activeWifi?.name ?? null,
+      networkingEnabled,
+      wifiDevice: null,
+      wifiEnabled: true,
+    }
+  }
 
   return {
     activeVpnCount: active.filter((connection) => isVpnType(connection.type)).length,
-    activeWifiName: activeWifi?.name ?? null,
-    networkingEnabled: getNetworkingState(),
+    activeWiredName: null,
+    activeWifiName: null,
+    networkingEnabled,
     wifiDevice: getWifiDevice(),
     wifiEnabled: getRadioState("wifi"),
   }
 }
 
 export async function getNetworkSummaryAsync(): Promise<NetworkSummary> {
-  const [active, networkingEnabled, wifiDevice, wifiEnabled] = await Promise.all([
+  const [active, networkingEnabled] = await Promise.all([
     getActiveConnectionsAsync(),
     nmcliAsync(["networking"]).then((state) => state === "enabled"),
+  ])
+  const activeWifi = active.find((connection) => isWifiType(connection.type))
+  const activeWired = getActiveWired(active)
+  const activeVpnCount = active.filter((connection) => isVpnType(connection.type)).length
+
+  if (!networkingEnabled || activeWifi || activeWired) {
+    return {
+      activeVpnCount,
+      activeWiredName: activeWired?.name ?? null,
+      activeWifiName: activeWifi?.name ?? null,
+      networkingEnabled,
+      wifiDevice: null,
+      wifiEnabled: true,
+    }
+  }
+
+  const [wifiDevice, wifiEnabled] = await Promise.all([
     getWifiDeviceAsync(),
     nmcliAsync(["radio", "wifi"]).then((state) => state === "enabled"),
   ])
-  const activeWifi = active.find((connection) => isWifiType(connection.type))
-  const activeVpnCount = active.filter((connection) => isVpnType(connection.type)).length
 
   return {
     activeVpnCount,
-    activeWifiName: activeWifi?.name ?? null,
+    activeWiredName: null,
+    activeWifiName: null,
     networkingEnabled,
     wifiDevice,
     wifiEnabled,
@@ -495,7 +612,7 @@ function launchFirstAvailable(candidates: string[][]) {
 export function openNetworkManager() {
   launchFirstAvailable([
     ["nm-connection-editor"],
-    ["gnome-control-center", "wifi"],
+    ["gnome-control-center", "network"],
     ["systemsettings", "kcm_networkmanagement"],
   ])
 }
