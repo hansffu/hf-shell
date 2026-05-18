@@ -1,9 +1,10 @@
 import { Gtk } from "ags/gtk4"
 import { For } from "gnim"
+import type { Accessor } from "gnim"
 import { markRead } from "../service/Notifications"
-import type { Notification, NotificationAction } from "../service/Notifications"
+import type { NotificationAction, NotificationSnapshot } from "../service/Notifications"
 
-export function notificationActions(notification: Notification): NotificationAction[] {
+export function notificationActions(notification: NotificationSnapshot): NotificationAction[] {
   return ((notification.actions ?? []) as NotificationAction[]).filter(
     (action) => action.id !== "default",
   )
@@ -33,7 +34,7 @@ export function NotificationActions({
   actions,
   notificationId,
 }: {
-  actions: () => NotificationAction[]
+  actions: Accessor<NotificationAction[]>
   notificationId: number
 }) {
   return (

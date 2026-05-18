@@ -1,14 +1,17 @@
 import { Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
-import { Accessor, createBinding, createComputed } from "gnim"
+import { createBinding, createComputed } from "gnim"
+import type { Accessor } from "gnim"
 import { appIconName } from "../service/DesktopIcons"
 import {
   dismissNotification,
   markRead,
   notificationUrgency,
 } from "../service/Notifications"
-import type { Notification, NotificationAction } from "../service/Notifications"
+import type { Notification, NotificationAction, NotificationSnapshot } from "../service/Notifications"
 import { NotificationActions, notificationActions } from "./NotificationActions"
+
+type DisplayNotification = Notification | NotificationSnapshot
 
 function plainBody(body: string) {
   return body.replace(/<[^>]*>/g, "").trim()
@@ -47,7 +50,7 @@ function setImageSource(image: Gtk.Image, source: string) {
   return true
 }
 
-function setNotificationImage(image: Gtk.Image, notification: Notification) {
+function setNotificationImage(image: Gtk.Image, notification: DisplayNotification) {
   const sources: Array<string | null | undefined> = [
     notification.image,
     notification.app_icon,
@@ -63,8 +66,21 @@ function setNotificationImage(image: Gtk.Image, notification: Notification) {
   }
 }
 
-function title(notification: Notification) {
+function title(notification: DisplayNotification) {
   return notification.summary || notification.app_name || "Notification"
+}
+
+function isLiveNotification(notification: DisplayNotification): notification is Notification {
+  return "connect" in notification
+}
+
+function notificationString(
+  notification: DisplayNotification,
+  property: "app_name" | "body" | "summary",
+) {
+  if (isLiveNotification(notification)) return createBinding(notification, property)
+
+  return createComputed(() => notification[property])
 }
 
 export default function NotificationCard({
@@ -78,16 +94,16 @@ export default function NotificationCard({
 }: {
   actions?: Accessor<NotificationAction[]>
   class?: string
-  notification: Notification
+  notification: DisplayNotification
   onDismiss?: (id: number) => void
   onHover?: (hovered: boolean) => void
   progress?: Accessor<number>
   showProgress?: boolean
 }) {
   const urgency = notificationUrgency(notification)
-  const appName = createBinding(notification, "app_name")
-  const summary = createBinding(notification, "summary")
-  const body = createBinding(notification, "body")
+  const appName = notificationString(notification, "app_name")
+  const summary = notificationString(notification, "summary")
+  const body = notificationString(notification, "body")
   const cardTitle = createComputed(() => summary() || appName() || title(notification))
   const cardBody = createComputed(() => plainBody(body()))
   const cardActions = actions ?? createComputed(() => notificationActions(notification))

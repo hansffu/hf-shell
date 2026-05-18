@@ -361,7 +361,7 @@ window.Bar {
 
   .system-monitor-compact-row {
     color: $fg-color;
-    margin: 0;
+    margin: 0.3rem;
     min-height: 2rem;
     min-width: 1.75rem;
     padding: 0;
@@ -388,9 +388,9 @@ window.Bar {
   .system-monitor-memory,
   .system-monitor-temp {
     color: $low-color;
-    font-size: 0.56rem;
-    font-weight: bold;
-    margin-top: -0.0625rem;
+    font-size: 0.76rem;
+    // font-weight: bold;
+    // margin-top: -0.0625rem;
   }
 
   .system-monitor-compact-row.critical .system-monitor-cpu,
@@ -427,8 +427,8 @@ window.Bar {
 
   .sound-control-percent {
     color: $low-color;
-    font-size: 0.56rem;
-    font-weight: bold;
+    font-size: 0.76rem;
+    // font-weight: bold;
     margin-top: -0.125rem;
   }
 

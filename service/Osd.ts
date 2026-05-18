@@ -23,12 +23,24 @@ const audio = wp.get_audio()
 export const [osdState, setOsdState] = createState<OsdState | null>(null)
 export const hasOsd = createComputed(() => osdState() !== null)
 
+function getDefaultSpeaker() {
+  const defaultSpeaker = [...(audio.get_speakers() ?? [])].find((endpoint) => endpoint.is_default)
+
+  return defaultSpeaker ?? audio.get_default_speaker()
+}
+
+function getDefaultMicrophone() {
+  const defaultMicrophone = [...(audio.get_microphones() ?? [])].find((endpoint) => endpoint.is_default)
+
+  return defaultMicrophone ?? audio.get_default_microphone()
+}
+
 let hideTimer = 0
-let speaker = audio.get_default_speaker()
+let speaker = getDefaultSpeaker()
 let speakerSignals: number[] = []
 let lastSpeakerVolume = speaker.volume
 let lastSpeakerMute = speaker.mute
-let microphone = audio.get_default_microphone()
+let microphone = getDefaultMicrophone()
 let microphoneSignals: number[] = []
 let lastMicrophoneVolume = microphone.volume
 let lastMicrophoneMute = microphone.mute
@@ -135,7 +147,7 @@ export function showScreenCaptureOsd(label: string, icon = "applets-screenshoote
 function bindSpeaker() {
   for (const signal of speakerSignals) speaker.disconnect(signal)
   speakerSignals = []
-  speaker = audio.get_default_speaker()
+  speaker = getDefaultSpeaker()
   lastSpeakerVolume = speaker.volume
   lastSpeakerMute = speaker.mute
 
@@ -160,7 +172,7 @@ function bindSpeaker() {
 function bindMicrophone() {
   for (const signal of microphoneSignals) microphone.disconnect(signal)
   microphoneSignals = []
-  microphone = audio.get_default_microphone()
+  microphone = getDefaultMicrophone()
   lastMicrophoneVolume = microphone.volume
   lastMicrophoneMute = microphone.mute
 
@@ -180,6 +192,43 @@ function bindMicrophone() {
     microphone.connect("notify::volume", update),
     microphone.connect("notify::volume-icon", update),
   ]
+}
+
+function connectEndpointDefaultSignals(
+  kind: "speaker" | "microphone",
+  bindDefault: () => void,
+) {
+  let endpointSignals: Array<[AstalWp.Endpoint, number]> = []
+
+  const disconnectEndpoints = () => {
+    for (const [endpoint, signal] of endpointSignals) endpoint.disconnect(signal)
+    endpointSignals = []
+  }
+
+  const refresh = () => {
+    disconnectEndpoints()
+
+    const endpoints = kind === "speaker" ? audio.get_speakers() : audio.get_microphones()
+
+    endpointSignals = [...(endpoints ?? [])].map((endpoint) => [
+      endpoint,
+      endpoint.connect("notify::is-default", refresh),
+    ])
+
+    bindDefault()
+  }
+
+  if (kind === "speaker") {
+    audio.connect("notify::default-speaker", refresh)
+    audio.connect("speaker-added", refresh)
+    audio.connect("speaker-removed", refresh)
+  } else {
+    audio.connect("notify::default-microphone", refresh)
+    audio.connect("microphone-added", refresh)
+    audio.connect("microphone-removed", refresh)
+  }
+
+  refresh()
 }
 
 function findBrightnessDevice() {
@@ -233,9 +282,7 @@ function pollBrightness() {
   return GLib.SOURCE_CONTINUE
 }
 
-audio.connect("notify::default-speaker", bindSpeaker)
-audio.connect("notify::default-microphone", bindMicrophone)
-bindSpeaker()
-bindMicrophone()
+connectEndpointDefaultSignals("speaker", bindSpeaker)
+connectEndpointDefaultSignals("microphone", bindMicrophone)
 pollBrightness()
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, BRIGHTNESS_POLL_MS, pollBrightness)

@@ -24,6 +24,18 @@ export type Notification = GObject.Object & {
   dismiss(): void
 }
 
+export type NotificationSnapshot = {
+  id: number
+  app_name: string
+  app_icon: string
+  summary: string
+  body: string
+  desktop_entry: string
+  image: string
+  urgency: number
+  actions: NotificationAction[]
+}
+
 export type NotifdService = GObject.Object & {
   dont_disturb: boolean
   connect(signal: "notified", callback: (_service: NotifdService, id: number) => void): number
@@ -33,7 +45,8 @@ export type NotifdService = GObject.Object & {
 
 export type NotificationRecord = {
   id: number
-  notification: Notification
+  notification: NotificationSnapshot
+  liveNotification: Notification | null
   receivedAt: number
   read: boolean
   resolved: boolean
@@ -58,9 +71,12 @@ const NORMAL_POPUP_TIMEOUT_MS = 10_000
 const CRITICAL_POPUP_TIMEOUT_MS = 0
 const TICK_MS = 100
 const IDLE_THRESHOLD_MS = 60_000
+const MAX_RECORDS = 80
+const MAX_POPUPS = 5
 
 export const notifd = Notifd.get_default() as NotifdService
 export const [records, setRecords] = createState<NotificationRecord[]>([])
+export const [notificationCenterOpen, setNotificationCenterOpen] = createState(false)
 export const [notificationCenterUnreadIds, setNotificationCenterUnreadIds] = createState<Set<number>>(new Set())
 export const [popups, setPopups] = createState<NotificationPopup[]>([])
 export const unreadCount = createComputed(
@@ -71,7 +87,7 @@ export const hasPopups = createComputed(() => popups().length > 0)
 let isUserIdle = false
 let hasSeenActiveSession = false
 
-export function notificationUrgency(notification: Notification): NotificationUrgency {
+export function notificationUrgency(notification: { urgency: number }): NotificationUrgency {
   if (notification.urgency === 0) return "low"
   if (notification.urgency === 2) return "critical"
   return "normal"
@@ -117,19 +133,52 @@ function updateIdleState() {
   isUserIdle = hasSeenActiveSession && idleMs >= IDLE_THRESHOLD_MS
 }
 
+function snapshotNotification(notification: Notification): NotificationSnapshot {
+  return {
+    id: notification.id,
+    app_name: notification.app_name,
+    app_icon: notification.app_icon,
+    summary: notification.summary,
+    body: notification.body,
+    desktop_entry: notification.desktop_entry,
+    image: notification.image,
+    urgency: notification.urgency,
+    actions: [...(notification.actions ?? [])],
+  }
+}
+
+function releaseRecordNotification(record: NotificationRecord) {
+  return {
+    ...record,
+    liveNotification: null,
+    notification: {
+      ...record.notification,
+      actions: [],
+    },
+    resolved: true,
+  }
+}
+
+function releaseNotificationReference(id: number) {
+  setRecords((current) =>
+    current.map((record) => (record.id === id ? releaseRecordNotification(record) : record)),
+  )
+}
+
 function upsertRecord(notification: Notification) {
   const receivedAt = Date.now()
 
   setRecords((current) => [
     {
       id: notification.id,
-      notification,
+      notification: snapshotNotification(notification),
+      liveNotification: notification,
       receivedAt,
       read: false,
       resolved: false,
     },
     ...current.filter((record) => record.id !== notification.id),
-  ])
+  ].slice(0, MAX_RECORDS))
 }
 
 export function markRead(id: number) {
@@ -167,6 +216,7 @@ export function clearAllRecords() {
 }
 
 export function openNotificationCenter() {
+  setNotificationCenterOpen(true)
   setNotificationCenterUnreadIds(
     new Set(records().filter((record) => !record.read).map((record) => record.id)),
   )
@@ -174,6 +224,7 @@ export function openNotificationCenter() {
 }
 
 export function closeNotificationCenter() {
+  setNotificationCenterOpen(false)
   setNotificationCenterUnreadIds(new Set())
 }
 
@@ -181,31 +232,35 @@ export function dismissNotification(id: number) {
   removePopup(id)
 
   const record = records().find((item) => item.id === id)
-  record?.notification.dismiss()
+  record?.liveNotification?.dismiss()
 
   setRecords((current) =>
-    current.map((item) => (item.id === id ? { ...item, resolved: true } : item)),
+    current.map((item) => (item.id === id ? releaseRecordNotification(item) : item)),
   )
 }
 
 export function dismissAllNotifications() {
-  for (const record of records()) record.notification.dismiss()
+  for (const record of records()) record.liveNotification?.dismiss()
   for (const popup of popups()) removePopup(popup.id)
   setNotificationCenterUnreadIds(new Set())
-  setRecords((current) => current.map((record) => ({ ...record, resolved: true })))
+  setRecords((current) => current.map(releaseRecordNotification))
 }
 
 export function setPopupHover(id: number, hovered: boolean) {
   popups().find((popup) => popup.id === id)?.setHovered(hovered)
 }
 
+function stopPopupTimer(popup: NotificationPopup) {
+  if (popup.timerId === 0) return
+
+  GLib.source_remove(popup.timerId)
+  popup.timerId = 0
+}
+
 export function removePopup(id: number) {
   setPopups((current) => {
     for (const popup of current) {
-      if (popup.id === id && popup.timerId !== 0) {
-        GLib.source_remove(popup.timerId)
-        popup.timerId = 0
-      }
+      if (popup.id === id) stopPopupTimer(popup)
     }
 
     return current.filter((popup) => popup.id !== id)
@@ -241,19 +296,32 @@ function addPopup(notification: Notification) {
       if (nextRemaining > 0) return GLib.SOURCE_CONTINUE
 
       popup.timerId = 0
+      releaseNotificationReference(notification.id)
       removePopup(notification.id)
       return GLib.SOURCE_REMOVE
     })
   }
 
-  setPopups((current) => [popup, ...current])
+  const droppedIds: number[] = []
+
+  setPopups((current) => {
+    const next = [popup, ...current].slice(0, MAX_POPUPS)
+    const dropped = current.filter((item) => !next.includes(item))
+
+    for (const item of dropped) {
+      stopPopupTimer(item)
+      droppedIds.push(item.id)
+    }
+
+    return next
+  })
+
+  for (const id of droppedIds) releaseNotificationReference(id)
 }
 
 function resolveNotification(id: number) {
   removePopup(id)
-  setRecords((current) =>
-    current.map((record) => (record.id === id ? { ...record, resolved: true } : record)),
-  )
+  releaseNotificationReference(id)
 }
 
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {

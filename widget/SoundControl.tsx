@@ -74,6 +74,11 @@ function compareProfiles(left: AstalWp.Profile, right: AstalWp.Profile) {
 }
 
 function getDefaultEndpoint(kind: EndpointKind) {
+  const endpoints = kind === "speaker" ? audio.get_speakers() : audio.get_microphones()
+  const defaultEndpoint = [...(endpoints ?? [])].find((endpoint) => endpoint.is_default)
+
+  if (defaultEndpoint) return defaultEndpoint
+
   return kind === "speaker"
     ? audio.get_default_speaker()
     : audio.get_default_microphone()
@@ -104,23 +109,56 @@ function iconName(icon: string, muted: boolean) {
 }
 
 function connectEndpointSignals(kind: EndpointKind, sync: () => void) {
-  const defaultEndpoint = getDefaultEndpoint(kind)
+  let endpointSignals: Array<[AstalWp.Endpoint, number]> = []
 
-  defaultEndpoint.connect("notify::description", sync)
-  defaultEndpoint.connect("notify::device", sync)
-  defaultEndpoint.connect("notify::device-id", sync)
-  defaultEndpoint.connect("notify::id", sync)
-  defaultEndpoint.connect("notify::name", sync)
+  const disconnectEndpointSignals = () => {
+    for (const [endpoint, signal] of endpointSignals) endpoint.disconnect(signal)
+    endpointSignals = []
+  }
+
+  const bindEndpointSignals = () => {
+    disconnectEndpointSignals()
+
+    const defaultEndpoint = getDefaultEndpoint(kind)
+    const endpointSet = new Set<AstalWp.Endpoint>(getEndpoints(kind))
+
+    endpointSet.add(defaultEndpoint)
+
+    endpointSignals = [...endpointSet].flatMap((endpoint) => {
+      const signals: Array<[AstalWp.Endpoint, number]> = [
+        [endpoint, endpoint.connect("notify::is-default", refresh)],
+      ]
+
+      if (endpoint.id === defaultEndpoint.id) {
+        signals.push(
+          [endpoint, endpoint.connect("notify::description", sync)],
+          [endpoint, endpoint.connect("notify::device", sync)],
+          [endpoint, endpoint.connect("notify::device-id", sync)],
+          [endpoint, endpoint.connect("notify::id", sync)],
+          [endpoint, endpoint.connect("notify::name", sync)],
+        )
+      }
+
+      return signals
+    })
+  }
+
+  const refresh = () => {
+    bindEndpointSignals()
+    sync()
+  }
 
   if (kind === "speaker") {
-    audio.connect("notify::default-speaker", sync)
-    audio.connect("speaker-added", sync)
-    audio.connect("speaker-removed", sync)
+    audio.connect("notify::default-speaker", refresh)
+    audio.connect("speaker-added", refresh)
+    audio.connect("speaker-removed", refresh)
   } else {
-    audio.connect("notify::default-microphone", sync)
-    audio.connect("microphone-added", sync)
-    audio.connect("microphone-removed", sync)
+    audio.connect("notify::default-microphone", refresh)
+    audio.connect("microphone-added", refresh)
+    audio.connect("microphone-removed", refresh)
   }
+
+  bindEndpointSignals()
 }
 
 function setupDeviceDropdown(
@@ -264,7 +302,7 @@ function setupProfileDropdown(
 }
 
 function setupSoundButton(button: Gtk.MenuButton, controls: SoundButtonControls) {
-  let speaker = audio.get_default_speaker()
+  let speaker = getDefaultEndpoint("speaker")
   let speakerSignals: number[] = []
 
   const disconnectSpeaker = () => {
@@ -280,7 +318,7 @@ function setupSoundButton(button: Gtk.MenuButton, controls: SoundButtonControls)
 
   const bindSpeaker = () => {
     disconnectSpeaker()
-    speaker = audio.get_default_speaker()
+    speaker = getDefaultEndpoint("speaker")
     speakerSignals = [
       speaker.connect("notify::mute", update),
       speaker.connect("notify::volume", update),
@@ -300,7 +338,7 @@ function setupSoundButton(button: Gtk.MenuButton, controls: SoundButtonControls)
   })
 
   button.add_controller(scroll)
-  audio.connect("notify::default-speaker", bindSpeaker)
+  connectEndpointSignals("speaker", bindSpeaker)
   bindSpeaker()
 }
 

@@ -33,7 +33,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
       <centerbox cssName="centerbox" orientation={Gtk.Orientation.VERTICAL}>
         <box $type="start" orientation={Gtk.Orientation.VERTICAL}>
           <Time />
-          <NotificationButton />
+          <NotificationButton gdkmonitor={gdkmonitor} />
           <SlackUnread />
           <WorkspaceApps />
           <SystemTray />

@@ -29,4 +29,12 @@ declare module "gnim" {
     each: Accessor<Iterable<Item>>
     children: (item: Item, index: Accessor<number>) => JSX.Element
   }): JSX.Element
+
+  export function With<T>({
+    value,
+    children,
+  }: {
+    value: Accessor<T>
+    children: (value: T) => JSX.Element | "" | false | null | undefined
+  }): JSX.Element
 }
