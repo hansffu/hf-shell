@@ -24,7 +24,7 @@ const countPatterns = [
   /\b(?:unread|notification|notifications|mention|mentions|message|messages|new item|new items)\D+(\d+)\b/i,
 ]
 
-export const [slackJsonUnreadCount, setSlackJsonUnreadCount] = createState(0)
+export const [slackJsonUnreadCount, setSlackJsonUnreadCount] = createState<number | null>(null)
 export const [slackJsonUnreadWorkspaces, setSlackJsonUnreadWorkspaces] = createState<
   SlackWorkspaceUnread[]
 >([])
@@ -81,6 +81,12 @@ function readSlackRootState() {
 
 function readSlackJsonUnreadCount() {
   const state = readSlackRootState()
+
+  if (!state) {
+    setSlackJsonUnreadWorkspaces([])
+    return null
+  }
+
   const teams = state?.webapp?.teams ?? {}
   const workspaces = state?.workspaces ?? {}
   const perTeam = Object.entries(teams).map(([teamId, team]) => {
@@ -166,11 +172,7 @@ export function hasSlackTrayItem(
   trayItems: AstalTray.TrayItem[] | null,
   windows: AstalNiri.Window[] | null,
 ) {
-  const items = trayItems ?? []
-
-  if (items.some((item) => isSlackText(trayText(item)))) return true
-  if (items.some((item) => isUnreadNotificationText(trayText(item)))) return true
-
+  void trayItems
   return (windows ?? []).some((window) => isSlackText(windowText(window)))
 }
 

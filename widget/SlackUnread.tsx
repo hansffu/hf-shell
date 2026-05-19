@@ -22,8 +22,9 @@ export default function SlackUnread() {
   const fallbackCount = createComputed(() => slackUnreadCount(trayItems(), windows()))
   const count = createComputed(() => {
     const fallback = fallbackCount()
+    const jsonCount = slackJsonUnreadCount()
 
-    return isSlackOpen() ? slackJsonUnreadCount() || fallback : 0
+    return isSlackOpen() ? jsonCount ?? fallback : 0
   })
   const label = createComputed(() => String(count()))
   const tooltip = createComputed(() => {
@@ -53,7 +54,7 @@ export default function SlackUnread() {
     <button
       class="slack-unread"
       tooltipText={tooltip}
-      visible={createComputed(() => isSlackOpen() && count() > 0)}
+      visible={isSlackOpen}
       onClicked={() => {
         const window = slackWindow(windows())
 
@@ -67,7 +68,7 @@ export default function SlackUnread() {
     >
       <box orientation={Gtk.Orientation.VERTICAL}>
         <image iconName={appIconName("slack")} pixelSize={18} useFallback />
-        <label class="slack-badge" label={label} />
+        <label class="slack-badge" label={label} visible={createComputed(() => count() > 0)} />
       </box>
     </button>
   )
