@@ -4,6 +4,7 @@ import { setupEscapeToClosePanels } from "../service/Panels"
 import BluetoothControl from "./BluetoothControl"
 import NetworkControl from "./NetworkControl"
 import NotificationButton from "./NotificationButton"
+import PowerControl from "./PowerControl"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
 import SlackUnread from "./SlackUnread"
 import SoundControl from "./SoundControl"
@@ -48,6 +49,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
           <NetworkControl />
           <BluetoothControl />
           <SoundControl />
+          <PowerControl />
         </box>
       </centerbox>
     </window>

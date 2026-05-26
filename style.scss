@@ -355,6 +355,51 @@ window.Bar {
     }
   }
 
+  .power-control {
+    margin: 0.375rem 0.25rem 0;
+    min-width: 1.75rem;
+  }
+
+  .power-control-content {
+    border-radius: 0.25rem;
+    color: $fg-color;
+    min-height: 2.375rem;
+    min-width: 1.75rem;
+    padding: 0.125rem;
+
+    &.medium {
+      color: #e5c07b;
+    }
+
+    &.low,
+    &.critical {
+      color: $critical-color;
+    }
+
+    &.critical {
+      background: $critical-bg;
+    }
+
+    image {
+      margin: 0;
+    }
+  }
+
+  .power-control-percent {
+    color: $low-color;
+    font-size: 0.76rem;
+    margin-top: -0.125rem;
+  }
+
+  .power-control-content.medium .power-control-percent {
+    color: #e5c07b;
+  }
+
+  .power-control-content.low .power-control-percent,
+  .power-control-content.critical .power-control-percent {
+    color: $critical-color;
+  }
+
   .system-monitor-content {
     margin: 0;
   }
