@@ -62,10 +62,16 @@
       pulseaudio
     ];
 
+    iconThemePackages = with pkgs; [
+      adwaita-icon-theme
+      hicolor-icon-theme
+    ];
+
     extraPackages =
       astalPackages
       ++ screenToolkitPackages
       ++ bluetoothPackages
+      ++ iconThemePackages
       ++ [
         pkgs.libadwaita
         pkgs.libsoup_3
@@ -87,6 +93,7 @@
         preFixup = ''
           gappsWrapperArgs+=(
             --prefix PATH : "${pkgs.lib.makeBinPath (screenToolkitPackages ++ bluetoothPackages)}"
+            --prefix XDG_DATA_DIRS : "${pkgs.lib.makeSearchPath "share" iconThemePackages}"
           )
         '';
 
@@ -110,6 +117,10 @@
             inherit extraPackages;
           })
         ];
+
+        shellHook = ''
+          export XDG_DATA_DIRS="${pkgs.lib.makeSearchPath "share" iconThemePackages}:$XDG_DATA_DIRS"
+        '';
       };
     };
   };
