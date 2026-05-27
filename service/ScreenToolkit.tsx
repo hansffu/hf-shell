@@ -83,10 +83,6 @@ function commandOsd(command: ScreenToolkitCommand) {
   }
 }
 
-export function screenToolkitPollCommand(command: string) {
-  return `sh '${scriptPath.replaceAll("'", "'\\''")}' ${command}`
-}
-
 function captureScopeLabel(scope: CaptureScope) {
   if (scope === "fullscreen") return "full screen"
   return scope
@@ -143,6 +139,10 @@ function runScreenToolkitSync(command: string) {
     void error
     return null
   }
+}
+
+export function screenToolkitStatus() {
+  return runScreenToolkitSync("status") ?? "idle"
 }
 
 export function pinRegion(gdkmonitor: Gdk.Monitor) {

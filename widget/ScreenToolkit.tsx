@@ -7,7 +7,7 @@ import {
   pinImage,
   pinRegion,
   runScreenToolkit,
-  screenToolkitPollCommand,
+  screenToolkitStatus,
   ScreenToolkitCommand,
   startScreenCapture,
 } from "../service/ScreenToolkit"
@@ -305,7 +305,7 @@ function CaptureMenu({ onStart }: { onStart: () => void }) {
 }
 
 export function ScreenCaptureStopButton() {
-  const status = createPoll("idle", 1000, screenToolkitPollCommand("status"))
+  const status = createPoll("idle", 1000, screenToolkitStatus)
   const elapsed = createComputed(() => {
     const [, rawSeconds] = status().split(" ")
     return Number(rawSeconds ?? 0)
