@@ -24,8 +24,7 @@ export type ScreenToolkitCommand =
 export type CaptureFormat = "gif" | "mp4"
 export type CaptureScope = "fullscreen" | "window" | "region"
 
-const globalWithSrc = globalThis as typeof globalThis & { SRC?: string }
-const sourceRoot = globalWithSrc.SRC ?? "."
+const sourceRoot = typeof SRC === "string" ? SRC : "."
 const scriptPath = GLib.build_filenamev([sourceRoot, "scripts", "screen-toolkit"])
 
 let nextPinId = 0

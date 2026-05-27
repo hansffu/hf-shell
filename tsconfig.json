@@ -19,5 +19,6 @@
     // "allowJs": true,
     "jsx": "react-jsx",
     "jsxImportSource": "ags/gtk4"
-  }
+  },
+  "exclude": ["result", "result-*"]
 }
