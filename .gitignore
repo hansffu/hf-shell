@@ -2,3 +2,5 @@ node_modules/
 @girs/
 .direnv/
 /.agent-shell/
+/result
+/result-*

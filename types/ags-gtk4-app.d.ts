@@ -4,7 +4,8 @@ declare module "ags/gtk4/app" {
 
   type StartOptions = {
     css?: string
-    main(): void
+    instanceName?: string
+    main(...argv: string[]): void
   }
 
   const app: {
