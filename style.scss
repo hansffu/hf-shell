@@ -357,15 +357,15 @@ window.Bar {
 
   .power-control {
     margin: 0.375rem 0.25rem 0;
-    min-width: 1.75rem;
+    min-width: 2.125rem;
   }
 
   .power-control-content {
     border-radius: 0.25rem;
     color: $fg-color;
-    min-height: 2.375rem;
-    min-width: 1.75rem;
-    padding: 0.125rem;
+    min-height: 2.75rem;
+    min-width: 2.125rem;
+    padding: 0.25rem 0.125rem;
 
     &.medium {
       color: #e5c07b;
@@ -387,8 +387,9 @@ window.Bar {
 
   .power-control-percent {
     color: $low-color;
-    font-size: 0.76rem;
-    margin-top: -0.125rem;
+    font-size: 0.72rem;
+    margin-top: 0.0625rem;
+    min-width: 1.875rem;
   }
 
   .power-control-content.medium .power-control-percent {

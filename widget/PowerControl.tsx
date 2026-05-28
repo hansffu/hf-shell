@@ -13,7 +13,12 @@ export default function PowerControl() {
             tooltipText={state.tooltip}
           >
             <image iconName={state.iconName} pixelSize={17} useFallback />
-            <label class="power-control-percent" label={state.label} />
+            <label
+              class="power-control-percent"
+              halign={Gtk.Align.CENTER}
+              justify={Gtk.Justification.CENTER}
+              label={state.label}
+            />
           </box>
         )}
       </With>

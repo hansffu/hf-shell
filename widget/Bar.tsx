@@ -14,7 +14,11 @@ import Time from "./Time"
 import WorkspaceApps from "./WorkspaceApps"
 import Workspaces from "./Workspaces"
 
-export default function Bar(gdkmonitor: Gdk.Monitor, name = "bar") {
+export default function Bar(
+  gdkmonitor: Gdk.Monitor,
+  name = "bar",
+  { primary = true }: { primary?: boolean } = {},
+) {
   const { TOP, BOTTOM, LEFT } = Astal.WindowAnchor
 
   return (
@@ -37,7 +41,7 @@ export default function Bar(gdkmonitor: Gdk.Monitor, name = "bar") {
           <NotificationButton gdkmonitor={gdkmonitor} />
           <SlackUnread />
           <WorkspaceApps gdkmonitor={gdkmonitor} />
-          <SystemTray />
+          {primary ? <SystemTray /> : null}
         </box>
         <box $type="center" orientation={Gtk.Orientation.VERTICAL}>
           <Workspaces gdkmonitor={gdkmonitor} />

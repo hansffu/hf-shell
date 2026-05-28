@@ -1,7 +1,7 @@
 import { Gtk } from "ags/gtk4"
 import Gio from "gi://Gio"
 import AstalTray from "gi://AstalTray"
-import { createBinding, createComputed, For } from "gnim"
+import { createBinding, createComputed, For, onCleanup } from "gnim"
 import { setupPanelPopover } from "./PanelRevealer"
 
 const tray = AstalTray.get_default()
@@ -19,8 +19,8 @@ function bindMenuActions(button: Gtk.Button, item: AstalTray.TrayItem) {
   popover.add_css_class("shell-menu")
   setupPanelPopover(popover)
   sync()
-  item.connect("notify::menu-model", () => popover.set_menu_model(item.get_menu_model()))
-  item.connect("notify::action-group", sync)
+  const menuSignal = item.connect("notify::menu-model", () => popover.set_menu_model(item.get_menu_model()))
+  const actionSignal = item.connect("notify::action-group", sync)
 
   rightClick.set_button(3)
   rightClick.connect("pressed", () => {
@@ -28,6 +28,13 @@ function bindMenuActions(button: Gtk.Button, item: AstalTray.TrayItem) {
     popover.popup()
   })
   button.add_controller(rightClick)
+
+  onCleanup(() => {
+    item.disconnect(menuSignal)
+    item.disconnect(actionSignal)
+    button.remove_controller(rightClick)
+    popover.unparent()
+  })
 }
 
 function TrayButton({ item }: { item: AstalTray.TrayItem }) {

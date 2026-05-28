@@ -33,11 +33,13 @@ type MonitorDisplay = {
 type TrackedWindow = {
   window: Gtk.Window
   dispose: () => void
+  primary?: boolean
 }
 
 const barWindows = new Map<string, TrackedWindow>()
 let monitorList: MonitorList | null = null
 let syncTimerId = 0
+let primaryBarKey: string | null = null
 let notificationPopupsWindow: TrackedWindow | null = null
 let notificationPopupsMonitorKey: string | null = null
 
@@ -109,8 +111,10 @@ function closeWindow(record: TrackedWindow | null) {
   record.dispose()
 }
 
-function createBarWindow(gdkmonitor: Gdk.Monitor, key: string) {
-  const window = createTrackedWindow(() => Bar(gdkmonitor, windowName("bar", key)) as Gtk.Window)
+function createBarWindow(gdkmonitor: Gdk.Monitor, key: string, primary: boolean) {
+  const window = createTrackedWindow(() =>
+    Bar(gdkmonitor, windowName("bar", key), { primary }) as Gtk.Window
+  )
   const monitor = gdkmonitor as MonitorIdentity
 
   monitor.connect?.("invalidate", () => {
@@ -122,7 +126,7 @@ function createBarWindow(gdkmonitor: Gdk.Monitor, key: string) {
     scheduleShellWindowsSync()
   })
 
-  return window
+  return { ...window, primary }
 }
 
 function syncShellWindows({
@@ -132,6 +136,7 @@ function syncShellWindows({
   const monitors = app.get_monitors()
   const activeBarKeys = new Set<string>()
   let hasPendingMonitor = false
+  let nextPrimaryBarKey: string | null = null
 
   monitors.forEach((gdkmonitor, index) => {
     const key = monitorKey(gdkmonitor, index)
@@ -142,10 +147,18 @@ function syncShellWindows({
     }
 
     activeBarKeys.add(key)
+    nextPrimaryBarKey ??= key
+
+    const existing = barWindows.get(key)
+    if (allowAdd && existing && existing.primary !== (key === nextPrimaryBarKey)) {
+      logInfo(`Recreating bar on display ${key}`)
+      closeWindow(existing)
+      barWindows.delete(key)
+    }
 
     if (allowAdd && !barWindows.has(key)) {
       logInfo(`Adding bar on display ${key}`)
-      barWindows.set(key, createBarWindow(gdkmonitor, key))
+      barWindows.set(key, createBarWindow(gdkmonitor, key, key === nextPrimaryBarKey))
     }
   })
 
@@ -156,6 +169,8 @@ function syncShellWindows({
     closeWindow(window)
     barWindows.delete(key)
   }
+
+  primaryBarKey = nextPrimaryBarKey
 
   const popupMonitor = monitors[0] ?? null
   const popupMonitorKey = popupMonitor ? monitorKey(popupMonitor, 0) : null
