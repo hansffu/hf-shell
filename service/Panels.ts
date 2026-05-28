@@ -1,21 +1,83 @@
 import { Astal, Gdk, Gtk } from "ags/gtk4"
 import AstalNiri from "gi://AstalNiri"
+import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 
 const popovers = new Set<Gtk.Popover>()
 const visiblePopovers = new Set<Gtk.Popover>()
-const niri = AstalNiri.get_default()
 type KeymodeHost = Gtk.Root & { set_keymode?: (mode: Astal.Keymode) => void }
 
-let keymodeHosts = new Set<KeymodeHost>()
-let lastFocusedWindowId: number | null = niri.focused_window?.id ?? null
+function runtimeNiriSockets() {
+  const runtimeDir = GLib.get_user_runtime_dir()
+  const waylandDisplay = GLib.getenv("WAYLAND_DISPLAY")
+  const sockets: string[] = []
 
-function rememberFocusedWindow(window = niri.focused_window) {
+  try {
+    const dir = GLib.Dir.open(runtimeDir, 0)
+    let name = dir.read_name()
+
+    while (name !== null) {
+      if (/^niri\..+\.sock$/.test(name)) {
+        sockets.push(GLib.build_filenamev([runtimeDir, name]))
+      }
+
+      name = dir.read_name()
+    }
+
+    dir.close()
+  } catch (error) {
+    void error
+  }
+
+  return sockets.sort((left, right) => {
+    const leftMatchesDisplay = waylandDisplay ? left.includes(`niri.${waylandDisplay}.`) : false
+    const rightMatchesDisplay = waylandDisplay ? right.includes(`niri.${waylandDisplay}.`) : false
+
+    return Number(rightMatchesDisplay) - Number(leftMatchesDisplay)
+  })
+}
+
+function canConnect(path: string | null) {
+  if (!path) return false
+
+  try {
+    const client = new Gio.SocketClient()
+    const connection = client.connect(Gio.UnixSocketAddress.new(path), null)
+
+    connection.close(null)
+    return true
+  } catch (error) {
+    void error
+    return false
+  }
+}
+
+function ensureNiriSocket() {
+  const current = GLib.getenv("NIRI_SOCKET")
+
+  if (canConnect(current)) return true
+
+  for (const socket of runtimeNiriSockets()) {
+    if (!canConnect(socket)) continue
+
+    GLib.setenv("NIRI_SOCKET", socket, true)
+    return true
+  }
+
+  return false
+}
+
+export const niri = ensureNiriSocket() ? AstalNiri.get_default() : null
+
+let keymodeHosts = new Set<KeymodeHost>()
+let lastFocusedWindowId: number | null = niri?.focused_window?.id ?? null
+
+function rememberFocusedWindow(window = niri?.focused_window) {
   if (window) lastFocusedWindowId = window.id
 }
 
-niri.connect("notify::focused-window", () => rememberFocusedWindow())
-niri.connect("window-focus-changed", (_niri, id: number) => {
+niri?.connect("notify::focused-window", () => rememberFocusedWindow())
+niri?.connect("window-focus-changed", (_niri, id: number) => {
   if (id > 0) lastFocusedWindowId = id
 })
 
@@ -47,7 +109,7 @@ function restoreNiriFocus() {
   if (windowId === null) return
 
   GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    const window = niri.get_window(windowId)
+    const window = niri?.get_window(windowId)
 
     window?.focus(windowId)
     return GLib.SOURCE_REMOVE

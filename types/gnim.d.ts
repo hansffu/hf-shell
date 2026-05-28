@@ -20,6 +20,7 @@ declare module "gnim" {
   ): Accessor<T>
 
   export function createComputed<T = unknown>(producer: () => T): Accessor<T>
+  export function createRoot<T>(fn: (dispose: () => void) => T): T
   export function createState<T>(initial: T): [Accessor<T>, Setter<T>]
   export function onCleanup(cleanup: () => void): void
 

@@ -1,17 +1,29 @@
 import { Gdk, Gtk } from "ags/gtk4"
-import AstalNiri from "gi://AstalNiri"
 import { createBinding, createComputed, For } from "gnim"
 import type { Accessor } from "gnim"
+import AstalNiri from "gi://AstalNiri"
+import { niri } from "../service/Panels"
 
-const niri = AstalNiri.get_default()
+type NiriWorkspace = AstalNiri.Workspace
+
+type MonitorIdentity = Gdk.Monitor & {
+  connector?: string | null
+  get_connector?: () => string | null
+}
+
+function monitorConnector(gdkmonitor: Gdk.Monitor) {
+  const monitor = gdkmonitor as MonitorIdentity
+
+  return monitor.connector || monitor.get_connector?.() || null
+}
 
 function workspaceClass(
-  workspace: AstalNiri.Workspace,
-  focusedWorkspace: AstalNiri.Workspace | null,
+  workspace: NiriWorkspace,
+  focusedWorkspace: NiriWorkspace | null,
   windows: unknown[] | null,
 ) {
   const classes = ["workspace"]
-  const isFocused = focusedWorkspace?.id === workspace.id || workspace.is_focused
+  const isFocused = workspace.is_active || focusedWorkspace?.id === workspace.id || workspace.is_focused
 
   if (isFocused) classes.push("focused")
   if (workspace.is_active) classes.push("active")
@@ -25,8 +37,8 @@ function WorkspaceButton({
   workspace,
   focusedWorkspace,
 }: {
-  workspace: AstalNiri.Workspace
-  focusedWorkspace: Accessor<AstalNiri.Workspace | null>
+  workspace: NiriWorkspace
+  focusedWorkspace: Accessor<NiriWorkspace | null>
 }) {
   const windows = createBinding(workspace, "windows")
   const className = createComputed(() =>
@@ -41,9 +53,11 @@ function WorkspaceButton({
 }
 
 export default function Workspaces({ gdkmonitor }: { gdkmonitor: Gdk.Monitor }) {
-  const output = gdkmonitor.connector
+  if (!niri) return <box $type="center" class="Workspaces" orientation={Gtk.Orientation.VERTICAL} />
+
+  const output = monitorConnector(gdkmonitor)
   const workspaces = createBinding(niri, "workspaces").as(
-    (workspaces: AstalNiri.Workspace[] | null) =>
+    (workspaces: NiriWorkspace[] | null) =>
       (workspaces ?? [])
         .filter((workspace) => !output || workspace.output === output)
         .sort((a, b) => a.idx - b.idx),

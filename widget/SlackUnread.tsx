@@ -1,8 +1,8 @@
 import { Gtk } from "ags/gtk4"
-import AstalNiri from "gi://AstalNiri"
 import AstalTray from "gi://AstalTray"
 import { createBinding, createComputed } from "gnim"
 import { appIconName } from "../service/DesktopIcons"
+import { niri } from "../service/Panels"
 import {
   hasSlackTrayItem,
   slackJsonUnreadCount,
@@ -12,10 +12,11 @@ import {
   slackWindow,
 } from "../service/Slack"
 
-const niri = AstalNiri.get_default()
 const tray = AstalTray.get_default()
 
 export default function SlackUnread() {
+  if (!niri) return null
+
   const trayItems = createBinding(tray, "items")
   const windows = createBinding(niri, "windows")
   const isSlackOpen = createComputed(() => hasSlackTrayItem(trayItems(), windows()))
