@@ -39,6 +39,9 @@ type NetworkListControls = {
 
 type NetworkSummary = Awaited<ReturnType<typeof getNetworkSummaryAsync>>
 
+const NETWORK_ROW_HEIGHT = 58
+const NETWORK_ROW_SPACING = 10
+
 function clearBox(box: Gtk.Box) {
   let child = box.get_first_child()
 
@@ -135,11 +138,17 @@ function networkIconName(state: NetworkSummary) {
   return "network-wireless-offline-symbolic"
 }
 
-function setupListScroller(scroller: Gtk.ScrolledWindow, minHeight: number, maxHeight: number) {
+function listHeightForRows(rows: number) {
+  const spacingCount = Math.max(0, Math.ceil(rows) - 1)
+
+  return Math.ceil(NETWORK_ROW_HEIGHT * rows + NETWORK_ROW_SPACING * spacingCount)
+}
+
+function setupListScroller(scroller: Gtk.ScrolledWindow, maxRows: number) {
   scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-  scroller.set_min_content_height(minHeight)
-  scroller.set_max_content_height(maxHeight)
-  scroller.set_propagate_natural_height(false)
+  scroller.set_min_content_height(listHeightForRows(1))
+  scroller.set_max_content_height(listHeightForRows(maxRows))
+  scroller.set_propagate_natural_height(true)
 }
 
 function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonControls) {
@@ -622,7 +631,7 @@ export default function NetworkControl() {
             <scrolledwindow
               class="network-scroll network-wifi-scroll"
               $={(scroller: Gtk.ScrolledWindow) => {
-                setupListScroller(scroller, 168, 360)
+                setupListScroller(scroller, 3.5)
               }}
             >
               <box
@@ -639,7 +648,7 @@ export default function NetworkControl() {
             <scrolledwindow
               class="network-scroll network-vpn-scroll"
               $={(scroller: Gtk.ScrolledWindow) => {
-                setupListScroller(scroller, 84, 168)
+                setupListScroller(scroller, 2.5)
               }}
             >
               <box
