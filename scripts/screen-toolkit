@@ -242,37 +242,33 @@ record_start() {
 }
 
 annotate_file() {
-  file="$1"
+  input="$1"
 
-  if command -v swappy >/dev/null 2>&1; then
-    swappy -f "$file" -o "$file"
-  elif command -v satty >/dev/null 2>&1; then
-    satty --filename "$file" --output-filename "$file" --copy-command wl-copy
-  else
-    notify "Saved screenshot. Install swappy or satty for annotation."
-  fi
+  need satty
+  satty --filename "$input"
+  printf "%s\n" "$input"
+}
 
-  copy_png "$file"
-  notify "Saved and copied: $file"
-  printf "%s\n" "$file"
+annotate_capture() {
+  input="$(temp_png annotate)"
+
+  trap 'rm -f "$input"' EXIT INT TERM
+  "$1" "$input"
+  annotate_file "$input"
+  rm -f "$input"
+  trap - EXIT INT TERM
 }
 
 annotate_region() {
-  file="$(filename "$SCREENSHOT_DIR" annotate png)"
-  capture_region "$file"
-  annotate_file "$file"
+  annotate_capture capture_region
 }
 
 annotate_fullscreen() {
-  file="$(filename "$SCREENSHOT_DIR" annotate png)"
-  capture_fullscreen "$file"
-  annotate_file "$file"
+  annotate_capture capture_fullscreen
 }
 
 annotate_window() {
-  file="$(filename "$SCREENSHOT_DIR" annotate png)"
-  capture_window "$file"
-  annotate_file "$file"
+  annotate_capture capture_window
 }
 
 hex_to_formats() {
