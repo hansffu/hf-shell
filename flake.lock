@@ -42,24 +42,23 @@
         "type": "github"
       }
     },
-    "astal-niri": {
+    "niri-gtk": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1765341517,
-        "narHash": "sha256-4WAab6GmBTjpkm1I6vaWAiFdnuDCo7wMXLegGCXbuSs=",
+        "lastModified": 1781862532,
+        "narHash": "sha256-Hiurzs/qs72jyIVfKs/QIk8KtKsXFkMg8Zz3cPtYazI=",
         "owner": "sameoldlab",
-        "repo": "astal",
-        "rev": "8ebaca7f913ea2c1af48a5adb424a0122d4a8cb1",
+        "repo": "niri-gtk",
+        "rev": "1948789ac0a1dc3ab133e7be0a8e75ccf73d64ad",
         "type": "github"
       },
       "original": {
         "owner": "sameoldlab",
-        "ref": "feat/niri",
-        "repo": "astal",
+        "repo": "niri-gtk",
         "type": "github"
       }
     },
@@ -82,7 +81,7 @@
     "root": {
       "inputs": {
         "ags": "ags",
-        "astal-niri": "astal-niri",
+        "niri-gtk": "niri-gtk",
         "nixpkgs": "nixpkgs"
       }
     }

@@ -8,8 +8,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    astal-niri = {
-      url = "github:sameoldlab/astal/feat/niri";
+    niri-gtk = {
+      url = "github:sameoldlab/niri-gtk";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -18,7 +18,7 @@
     self,
     nixpkgs,
     ags,
-    astal-niri,
+    niri-gtk,
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
@@ -33,7 +33,7 @@
       notifd
       tray
       wireplumber
-      astal-niri.packages.${system}.niri
+      niri-gtk.packages.${system}.niri
     ];
 
     screenToolkitPackages = with pkgs; [
