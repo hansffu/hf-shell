@@ -70,16 +70,6 @@ function ensureNiriSocket() {
 export const niri = ensureNiriSocket() ? AstalNiri.get_default() : null
 
 let keymodeHosts = new Set<KeymodeHost>()
-let lastFocusedWindowId: number | null = niri?.focused_window?.id ?? null
-
-function rememberFocusedWindow(window = niri?.focused_window) {
-  if (window) lastFocusedWindowId = window.id
-}
-
-niri?.connect("notify::focused-window", () => rememberFocusedWindow())
-niri?.connect("window-focus-changed", (_niri, id: number) => {
-  if (id > 0) lastFocusedWindowId = id
-})
 
 function popoverKeymodeHost(popover: Gtk.Popover) {
   return popover.get_root() as KeymodeHost | null
@@ -103,18 +93,21 @@ function refreshPanelHostKeymodes() {
   keymodeHosts = activeHosts
 }
 
-function restoreNiriFocus() {
-  const windowId = lastFocusedWindowId
-
-  if (windowId === null) return
-
-  GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-    const window = niri?.get_window(windowId)
-
-    window?.focus(windowId)
-    return GLib.SOURCE_REMOVE
-  })
+function hasVisiblePanels() {
+  return visiblePopovers.size > 0
 }
+
+function closePanelsForNiriChange() {
+  if (hasVisiblePanels()) closePanels()
+}
+
+niri?.connect("window-opened", () => closePanelsForNiriChange())
+niri?.connect("window-focus-changed", (_niri, id: number) => {
+  if (id > 0) closePanelsForNiriChange()
+})
+niri?.connect("workspace-activated", (_niri, _id: number, focused: boolean) => {
+  if (focused) closePanelsForNiriChange()
+})
 
 function syncPopoverVisibility(popover: Gtk.Popover) {
   if (popover.visible) {
@@ -125,10 +118,6 @@ function syncPopoverVisibility(popover: Gtk.Popover) {
 
   visiblePopovers.delete(popover)
   refreshPanelHostKeymodes()
-
-  if (visiblePopovers.size === 0) {
-    restoreNiriFocus()
-  }
 }
 
 export function registerPanelPopover(popover: Gtk.Popover) {
@@ -148,8 +137,6 @@ export function closePanelPopovers() {
 
 export function closePanels() {
   closePanelPopovers()
-
-  if (visiblePopovers.size === 0) restoreNiriFocus()
 }
 
 export function setupEscapeToClosePanels(window: Gtk.Window) {
