@@ -122,7 +122,7 @@ window.Bar {
 
   > centerbox {
     background: $bg-color;
-    min-width: 1.875rem;
+    min-width: 1.5rem;
     // border: 1px solid $border-color;
     // border-radius: 10px;
     // margin: 8px;
@@ -134,7 +134,7 @@ window.Bar {
     border: 1px solid transparent;
     border-radius: 0.5rem;
     margin: 0.125rem;
-    padding: 0.25rem 0.625rem;
+    padding: 0.25rem 0.375rem;
 
     &:hover {
       background: $hover-color;
@@ -163,19 +163,19 @@ window.Bar {
   button.tray-item {
     border: 0;
     border-radius: 0.25rem;
-    margin: 0.125rem 0.25rem;
+    margin: 0.125rem 0.1875rem;
     min-height: 1.75rem;
-    min-width: 1.75rem;
-    padding: 0.125rem;
+    min-width: 1.5rem;
+    padding: 0.0625rem;
   }
 
   button.app {
     border: 0;
     border-radius: 0.25rem;
-    margin: 0.125rem 0.25rem;
+    margin: 0.125rem 0.1875rem;
     min-height: 1.75rem;
-    min-width: 1.75rem;
-    padding: 0.125rem;
+    min-width: 1.5rem;
+    padding: 0.0625rem;
 
     &.focused {
       background: $hover-color;
@@ -184,14 +184,14 @@ window.Bar {
   }
 
   menubutton.notification-toggle {
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
 
     > button {
       border: 0;
       border-radius: 0.25rem;
       min-height: 1.75rem;
-      min-width: 1.75rem;
-      padding: 0.125rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
     }
 
     .notification-badge {
@@ -209,10 +209,10 @@ window.Bar {
   button.slack-unread {
     border: 0;
     border-radius: 0.25rem;
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
     min-height: 1.75rem;
-    min-width: 1.75rem;
-    padding: 0.125rem;
+    min-width: 1.5rem;
+    padding: 0.0625rem;
 
     .slack-badge {
       background: $blue-color;
@@ -227,14 +227,14 @@ window.Bar {
   }
 
   menubutton.screen-toolkit {
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
 
     > button {
       border: 0;
       border-radius: 0.25rem;
       min-height: 1.75rem;
-      min-width: 1.75rem;
-      padding: 0.125rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
     }
   }
 
@@ -243,10 +243,10 @@ window.Bar {
     border: 0;
     border-radius: 0.25rem;
     color: $critical-color;
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
     min-height: 1.75rem;
-    min-width: 1.75rem;
-    padding: 0.125rem;
+    min-width: 1.5rem;
+    padding: 0.0625rem;
 
     &:hover {
       background: #3b252c;
@@ -258,8 +258,8 @@ window.Bar {
     background: #c678dd;
     border: 0;
     border-radius: 0.25rem;
-    margin: 0.25rem 0.375rem;
-    min-width: 1rem;
+    margin: 0.25rem 0.25rem;
+    min-width: 0.875rem;
     min-height: 1.125rem;
     padding: 0;
 
@@ -298,8 +298,8 @@ window.Bar {
     > button {
       background: transparent;
       color: $fg-color;
-      min-width: 1.25rem;
-      padding: 0.25rem 0.125rem;
+      min-width: 1rem;
+      padding: 0.25rem 0.0625rem;
 
       &:hover {
         background: $hover-color;
@@ -308,64 +308,64 @@ window.Bar {
   }
 
   menubutton.sound-control {
-    margin: 0.375rem 0.25rem;
+    margin: 0.375rem 0.1875rem;
 
     > button {
       border: 0;
       border-radius: 0.25rem;
       min-height: 2.375rem;
-      min-width: 1.75rem;
-      padding: 0.125rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
     }
   }
 
   menubutton.bluetooth-control {
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
 
     > button {
       border: 0;
       border-radius: 0.25rem;
       min-height: 2.375rem;
-      min-width: 1.75rem;
-      padding: 0.125rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
     }
   }
 
   menubutton.network-control {
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
 
     > button {
       border: 0;
       border-radius: 0.25rem;
       min-height: 2.375rem;
-      min-width: 1.75rem;
-      padding: 0.125rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
     }
   }
 
   menubutton.system-monitor {
-    margin: 0.375rem 0.25rem 0;
+    margin: 0.375rem 0.1875rem 0;
 
     > button {
       border: 0;
       border-radius: 0.25rem;
       min-height: 6.5625rem;
-      min-width: 1.75rem;
-      padding: 0.125rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
     }
   }
 
   .power-control {
-    margin: 0.375rem 0.25rem 0;
-    min-width: 2.125rem;
+    margin: 0.375rem 0.1875rem 0;
+    min-width: 1.625rem;
   }
 
   .power-control-content {
     border-radius: 0.25rem;
     color: $fg-color;
     min-height: 2.75rem;
-    min-width: 2.125rem;
-    padding: 0.25rem 0.125rem;
+    min-width: 1.625rem;
+    padding: 0.25rem 0.0625rem;
 
     &.medium {
       color: #e5c07b;
@@ -387,9 +387,9 @@ window.Bar {
 
   .power-control-percent {
     color: $low-color;
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     margin-top: 0.0625rem;
-    min-width: 1.875rem;
+    min-width: 1.5rem;
   }
 
   .power-control-content.medium .power-control-percent {
@@ -407,9 +407,9 @@ window.Bar {
 
   .system-monitor-compact-row {
     color: $fg-color;
-    margin: 0.3rem;
+    margin: 0.225rem;
     min-height: 2rem;
-    min-width: 1.75rem;
+    min-width: 1.5rem;
     padding: 0;
 
     &.memory,
@@ -434,7 +434,7 @@ window.Bar {
   .system-monitor-memory,
   .system-monitor-temp {
     color: $low-color;
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     // font-weight: bold;
     // margin-top: -0.0625rem;
   }
@@ -473,7 +473,7 @@ window.Bar {
 
   .sound-control-percent {
     color: $low-color;
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     // font-weight: bold;
     margin-top: -0.125rem;
   }
