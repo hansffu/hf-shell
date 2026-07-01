@@ -54,6 +54,12 @@ function logInfo(message: string) {
   runtime.print?.(message)
 }
 
+function configureIconTheme() {
+  const settings = Gtk.Settings.get_default()
+
+  if (settings) settings.gtk_icon_theme_name = GLib.getenv("HF_SHELL_ICON_THEME") || "Papirus-Dark"
+}
+
 function monitorConnector(gdkmonitor: Gdk.Monitor) {
   const monitor = gdkmonitor as MonitorIdentity
 
@@ -254,6 +260,7 @@ try {
     css: style,
     instanceName: "hf-shell",
     main() {
+      configureIconTheme()
       syncShellWindows()
       watchMonitorChanges()
     },

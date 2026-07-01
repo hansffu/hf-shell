@@ -129,7 +129,10 @@ function setupBluetoothButton(button: Gtk.MenuButton, controls: BluetoothButtonC
         ? "bluetooth-active-symbolic"
         : "bluetooth-disabled-symbolic",
     )
-    controls.label.set_label(connected > 0 ? String(connected) : "")
+    const label = connected > 0 ? String(connected) : ""
+
+    controls.label.set_label(label)
+    controls.label.set_visible(label.length > 0)
     button.set_tooltip_text(
       state.adapterAvailable
         ? `${state.powered ? "Bluetooth" : "Bluetooth disabled"}: ${connectedLabel(connected)}`
@@ -370,6 +373,7 @@ export default function BluetoothControl() {
         />
         <label
           class="bluetooth-control-count"
+          visible={false}
           $={(label) => {
             buttonControls = { ...buttonControls, label }
             maybeSetupButton()

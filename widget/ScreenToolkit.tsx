@@ -37,13 +37,13 @@ const screenshotTools: Tool[] = [
   {
     command: "annotateWindow",
     description: "Annotate the active Hyprland window",
-    icon: "window-symbolic",
+    icon: "window",
     label: "Window",
   },
   {
     command: "measure",
     description: "Select a region and copy its pixel size",
-    icon: "tool-measure-symbolic",
+    icon: "tool-measure",
     label: "Measure",
   },
 ]

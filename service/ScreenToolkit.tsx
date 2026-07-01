@@ -54,9 +54,9 @@ function commandOsd(command: ScreenToolkitCommand) {
     case "annotateFullscreen":
       return ["Capturing full screen", "view-fullscreen-symbolic"] as const
     case "annotateWindow":
-      return ["Capturing active window", "window-symbolic"] as const
+      return ["Capturing active window", "window"] as const
     case "measure":
-      return ["Select area to measure", "tool-measure-symbolic"] as const
+      return ["Select area to measure", "tool-measure"] as const
     case "colorPicker":
       return ["Pick a color", "color-select-symbolic"] as const
     case "palette":

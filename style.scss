@@ -313,7 +313,7 @@ window.Bar {
     > button {
       border: 0;
       border-radius: 0.25rem;
-      min-height: 2.375rem;
+      min-height: 2rem;
       min-width: 1.5rem;
       padding: 0.0625rem;
     }
@@ -325,7 +325,7 @@ window.Bar {
     > button {
       border: 0;
       border-radius: 0.25rem;
-      min-height: 2.375rem;
+      min-height: 1.5rem;
       min-width: 1.5rem;
       padding: 0.0625rem;
     }
@@ -337,7 +337,7 @@ window.Bar {
     > button {
       border: 0;
       border-radius: 0.25rem;
-      min-height: 2.375rem;
+      min-height: 1.5rem;
       min-width: 1.5rem;
       padding: 0.0625rem;
     }
@@ -449,6 +449,10 @@ window.Bar {
     margin: 0;
   }
 
+  .bluetooth-control-content image {
+    margin: 0;
+  }
+
   .bluetooth-control-count {
     color: $low-color;
     font-size: 0.56rem;
@@ -460,6 +464,10 @@ window.Bar {
     margin: 0;
   }
 
+  .network-control-content image {
+    margin: 0;
+  }
+
   .network-control-vpn {
     color: $low-color;
     font-size: 0.56rem;
@@ -468,6 +476,10 @@ window.Bar {
   }
 
   .sound-control-content {
+    margin: 0;
+  }
+
+  .sound-control-content image {
     margin: 0;
   }
 

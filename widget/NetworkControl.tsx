@@ -164,7 +164,10 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
         controls.icon.set_from_icon_name(
           state.networkingEnabled ? networkIconName(state) : "network-wireless-offline-symbolic",
         )
-        controls.label.set_label(vpnLabel(state.activeVpnCount))
+        const label = vpnLabel(state.activeVpnCount)
+
+        controls.label.set_label(label)
+        controls.label.set_visible(label.length > 0)
         button.set_tooltip_text(
           state.activeVpnCount > 0
             ? `${summaryStatusText(state)} - ${vpnLabel(state.activeVpnCount)}`
@@ -177,6 +180,7 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
 
         controls.icon.set_from_icon_name("network-wireless-offline-symbolic")
         controls.label.set_label("")
+        controls.label.set_visible(false)
         button.set_tooltip_text("Network unavailable")
       })
   }
@@ -185,6 +189,7 @@ function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonContr
   const disconnectStateSignals = connectNetworkStateSignals(refresh)
   controls.icon.set_from_icon_name("network-wireless-symbolic")
   controls.label.set_label("")
+  controls.label.set_visible(false)
   button.set_tooltip_text("Network")
   refresh()
 
@@ -566,6 +571,7 @@ export default function NetworkControl() {
         />
         <label
           class="network-control-vpn"
+          visible={false}
           $={(label) => {
             buttonControls = { ...buttonControls, label }
             maybeSetupButton()
