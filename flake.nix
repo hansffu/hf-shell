@@ -63,7 +63,6 @@
     ];
 
     iconThemePackages = with pkgs; [
-      papirus-icon-theme
       adwaita-icon-theme
       hicolor-icon-theme
     ];

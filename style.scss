@@ -1,20 +1,42 @@
-$bg-color: #1C1E24;
-$fg-color: #bbc2cf;
-$base-color: #1c1f24;
-$border-color: #3f444a;
-$hover-color: #2f343d;
-$active-color: #51afef;
-$blue-color: #51afef;
-$low-color: #7f8490;
-$critical-color: #ff6c6b;
-$critical-bg: #2a2025;
+@define-color hf_shell_bg #1c1e24;
+@define-color hf_shell_surface #1c1f24;
+@define-color hf_shell_on_surface #bbc2cf;
+@define-color hf_shell_border #3f444a;
+@define-color hf_shell_fg #bbc2cf;
+@define-color hf_shell_muted #7f8490;
+@define-color hf_shell_primary #51afef;
+@define-color hf_shell_secondary #c678dd;
+@define-color hf_shell_danger #ff6c6b;
+@define-color hf_shell_warning #e5c07b;
+@define-color hf_shell_on_accent #1c1f24;
+
+$hf_shell_bg: unquote("@hf_shell_bg");
+$hf_shell_surface: unquote("@hf_shell_surface");
+$hf_shell_on_surface: unquote("@hf_shell_on_surface");
+$hf_shell_border: unquote("@hf_shell_border");
+$hf_shell_fg: unquote("@hf_shell_fg");
+$hf_shell_muted: unquote("@hf_shell_muted");
+$hf_shell_primary: unquote("@hf_shell_primary");
+$hf_shell_secondary: unquote("@hf_shell_secondary");
+$hf_shell_danger: unquote("@hf_shell_danger");
+$hf_shell_warning: unquote("@hf_shell_warning");
+$hf_shell_on_accent: unquote("@hf_shell_on_accent");
+
+$hf_shell_surface_hover: unquote("shade(@hf_shell_surface, 1.12)");
+$hf_shell_surface_raised: unquote("shade(@hf_shell_surface, 1.2)");
+$hf_shell_primary_hover: unquote("shade(@hf_shell_primary, 1.15)");
+$hf_shell_secondary_hover: unquote("shade(@hf_shell_secondary, 1.15)");
+$hf_shell_workspace_empty: unquote("alpha(@hf_shell_secondary, 0.35)");
+$hf_shell_danger_bg: unquote("alpha(@hf_shell_danger, 0.16)");
+$hf_shell_danger_bg_hover: unquote("alpha(@hf_shell_danger, 0.24)");
+$hf_shell_pin_picture_bg: unquote("shade(@hf_shell_bg, 0.72)");
 
 label {
     font-weight: normal;
 }
 
 .shell-panel {
-  background: $bg-color;
+  background: $hf_shell_bg;
   border: 0;
   border-radius: 0;
   padding: 1rem;
@@ -35,39 +57,39 @@ popover arrow {
 }
 
 popover.shell-menu > contents {
-  background: $bg-color;
+  background: $hf_shell_bg;
   border: 0;
   border-radius: 0;
   padding: 0.375rem;
 }
 
 dropdown.shell-select.shell-select {
-  background-color: $hover-color;
+  background-color: $hf_shell_surface_hover;
   background-image: none;
-  border: 1px solid $border-color;
+  border: 1px solid $hf_shell_border;
   border-radius: 0.375rem;
   box-shadow: none;
-  color: $fg-color;
+  color: $hf_shell_fg;
   margin: 0;
   min-height: 1.875rem;
 
   &:hover {
-    background-color: #343941;
-    border-color: $active-color;
+    background-color: $hf_shell_surface_hover;
+    border-color: $hf_shell_primary;
   }
 
   &:disabled {
-    background-color: $base-color;
-    color: $low-color;
+    background-color: $hf_shell_surface;
+    color: $hf_shell_on_surface;
   }
 
   button {
-    background-color: $hover-color;
+    background-color: $hf_shell_surface_hover;
     background-image: none;
     border: 0;
     border-radius: 0.375rem;
     box-shadow: none;
-    color: $fg-color;
+    color: $hf_shell_fg;
     margin: 0;
     min-height: 1.875rem;
     padding: 0.25rem 0.5rem;
@@ -75,76 +97,76 @@ dropdown.shell-select.shell-select {
 
   &:disabled button,
   button:disabled {
-    background-color: $base-color;
-    color: $low-color;
+    background-color: $hf_shell_surface;
+    color: $hf_shell_on_surface;
   }
 
   popover {
     box-shadow: none;
-    color: $fg-color;
+    color: $hf_shell_fg;
   }
 
   popover > contents {
-    background-color: $bg-color;
+    background-color: $hf_shell_bg;
     background-image: none;
-    border: 1px solid $border-color;
+    border: 1px solid $hf_shell_border;
     border-radius: 0.375rem;
     box-shadow: none;
-    color: $fg-color;
+    color: $hf_shell_fg;
     padding: 0.25rem;
   }
 
   popover listview,
   popover list {
-    background-color: $bg-color;
+    background-color: $hf_shell_bg;
     background-image: none;
-    color: $fg-color;
+    color: $hf_shell_fg;
   }
 
   popover row,
   popover listitem {
     background-color: transparent;
     background-image: none;
-    color: $fg-color;
+    color: $hf_shell_fg;
   }
 
   popover row:hover,
   popover listitem:hover {
-    background-color: $hover-color;
+    background-color: $hf_shell_surface_hover;
     background-image: none;
   }
 }
 
 window.Bar {
   background: transparent;
-  color: $fg-color;
+  color: $hf_shell_fg;
   font-weight: normal;
 
   > centerbox {
-    background: $bg-color;
+    background: $hf_shell_bg;
     min-width: 1.5rem;
-    // border: 1px solid $border-color;
+    // border: 1px solid $hf_shell_border;
     // border-radius: 10px;
     // margin: 8px;
   }
 
   button {
     background: transparent;
-    color: $fg-color;
+    color: $hf_shell_fg;
     border: 1px solid transparent;
     border-radius: 0.5rem;
     margin: 0.125rem;
     padding: 0.25rem 0.375rem;
 
     &:hover {
-      background: $hover-color;
-      border-color: $border-color;
+      background: $hf_shell_surface_hover;
+      border-color: $hf_shell_border;
     }
 
     &:active {
-      background: $base-color;
-      border-color: $active-color;
-      color: $active-color;
+      background: $hf_shell_surface_raised;
+      border-color: $hf_shell_primary;
+      color: $hf_shell_primary;
     }
   }
 
@@ -178,8 +200,8 @@ window.Bar {
     padding: 0.0625rem;
 
     &.focused {
-      background: $hover-color;
-      color: $active-color;
+      background: $hf_shell_surface_hover;
+      color: $hf_shell_primary;
     }
   }
 
@@ -195,9 +217,9 @@ window.Bar {
     }
 
     .notification-badge {
-      background: #ff6c6b;
+      background: $hf_shell_danger;
       border-radius: 999px;
-      color: #ffffff;
+      color: $hf_shell_on_accent;
       font-size: 0.58rem;
       font-weight: bold;
       margin-top: -0.25rem;
@@ -215,9 +237,9 @@ window.Bar {
     padding: 0.0625rem;
 
     .slack-badge {
-      background: $blue-color;
+      background: $hf_shell_primary;
       border-radius: 999px;
-      color: $base-color;
+      color: $hf_shell_on_accent;
       font-size: 0.58rem;
       font-weight: bold;
       margin-top: -0.25rem;
@@ -239,23 +261,23 @@ window.Bar {
   }
 
   button.screen-capture-stop {
-    background: $critical-bg;
+    background: $hf_shell_danger_bg;
     border: 0;
     border-radius: 0.25rem;
-    color: $critical-color;
+    color: $hf_shell_danger;
     margin: 0.375rem 0.1875rem 0;
     min-height: 1.75rem;
     min-width: 1.5rem;
     padding: 0.0625rem;
 
     &:hover {
-      background: #3b252c;
+      background: $hf_shell_danger_bg_hover;
       border: 0;
     }
   }
 
   button.workspace {
-    background: #c678dd;
+    background: $hf_shell_secondary;
     border: 0;
     border-radius: 0.25rem;
     margin: 0.25rem 0.25rem;
@@ -264,45 +286,45 @@ window.Bar {
     padding: 0;
 
     &.active {
-      background: #61afef;
+      background: $hf_shell_primary;
       min-height: 2.25rem;
     }
 
     &.focused {
-      background: #61afef;
+      background: $hf_shell_primary;
       min-height: 2.25rem;
     }
 
     &.empty {
-      background: #5b3b66;
+      background: $hf_shell_workspace_empty;
     }
 
     &.urgent {
-      background: #ff6c6b;
+      background: $hf_shell_danger;
     }
 
     &:hover {
-      background: #d98cee;
+      background: $hf_shell_secondary_hover;
       border: 0;
     }
 
     &.active:hover,
     &.focused:hover {
-      background: #7cc7ff;
+      background: $hf_shell_primary_hover;
     }
   }
 
   menubutton {
-    color: $fg-color;
+    color: $hf_shell_fg;
 
     > button {
       background: transparent;
-      color: $fg-color;
+      color: $hf_shell_fg;
       min-width: 1rem;
       padding: 0.25rem 0.0625rem;
 
       &:hover {
-        background: $hover-color;
+        background: $hf_shell_surface_hover;
       }
     }
   }
@@ -362,22 +384,22 @@ window.Bar {
 
   .power-control-content {
     border-radius: 0.25rem;
-    color: $fg-color;
+    color: $hf_shell_fg;
     min-height: 2.75rem;
     min-width: 1.625rem;
     padding: 0.25rem 0.0625rem;
 
     &.medium {
-      color: #e5c07b;
+      color: $hf_shell_warning;
     }
 
     &.low,
     &.critical {
-      color: $critical-color;
+      color: $hf_shell_danger;
     }
 
     &.critical {
-      background: $critical-bg;
+      background: $hf_shell_danger_bg;
     }
 
     image {
@@ -386,19 +408,19 @@ window.Bar {
   }
 
   .power-control-percent {
-    color: $low-color;
+    color: $hf_shell_muted;
     font-size: 0.66rem;
     margin-top: 0.0625rem;
     min-width: 1.5rem;
   }
 
   .power-control-content.medium .power-control-percent {
-    color: #e5c07b;
+    color: $hf_shell_warning;
   }
 
   .power-control-content.low .power-control-percent,
   .power-control-content.critical .power-control-percent {
-    color: $critical-color;
+    color: $hf_shell_danger;
   }
 
   .system-monitor-content {
@@ -406,7 +428,7 @@ window.Bar {
   }
 
   .system-monitor-compact-row {
-    color: $fg-color;
+    color: $hf_shell_fg;
     margin: 0.225rem;
     min-height: 2rem;
     min-width: 1.5rem;
@@ -418,7 +440,7 @@ window.Bar {
     }
 
     &.critical {
-      color: $critical-color;
+      color: $hf_shell_danger;
     }
 
     image {
@@ -433,7 +455,7 @@ window.Bar {
   .system-monitor-cpu,
   .system-monitor-memory,
   .system-monitor-temp {
-    color: $low-color;
+    color: $hf_shell_muted;
     font-size: 0.7rem;
     // font-weight: bold;
     // margin-top: -0.0625rem;
@@ -442,7 +464,7 @@ window.Bar {
   .system-monitor-compact-row.critical .system-monitor-cpu,
   .system-monitor-compact-row.critical .system-monitor-memory,
   .system-monitor-compact-row.critical .system-monitor-temp {
-    color: $critical-color;
+    color: $hf_shell_danger;
   }
 
   .bluetooth-control-content {
@@ -454,7 +476,7 @@ window.Bar {
   }
 
   .bluetooth-control-count {
-    color: $low-color;
+    color: $hf_shell_muted;
     font-size: 0.56rem;
     font-weight: bold;
     margin-top: -0.125rem;
@@ -469,7 +491,7 @@ window.Bar {
   }
 
   .network-control-vpn {
-    color: $low-color;
+    color: $hf_shell_muted;
     font-size: 0.56rem;
     font-weight: bold;
     margin-top: -0.125rem;
@@ -484,7 +506,7 @@ window.Bar {
   }
 
   .sound-control-percent {
-    color: $low-color;
+    color: $hf_shell_muted;
     font-size: 0.7rem;
     // font-weight: bold;
     margin-top: -0.125rem;
@@ -531,14 +553,14 @@ window.Bar {
   }
 
   .panel-section-title {
-    color: $low-color;
+    color: $hf_shell_on_surface;
     font-size: 0.72rem;
     font-weight: bold;
     margin-bottom: 0.25rem;
   }
 
   .panel-section-content {
-    background: #282C34;
+    background: $hf_shell_surface_raised;
     border-radius: 0.375rem;
     box-shadow:
       inset 0 0 0.45rem rgba(0, 0, 0, 0.38),
@@ -561,7 +583,7 @@ window.Bar {
     }
 
     label.screen-toolkit-tool-label {
-      color: $low-color;
+      color: $hf_shell_fg;
       font-size: 0.66rem;
       font-weight: 300;
       margin-top: 0.125rem;
@@ -594,14 +616,14 @@ window.Bar {
     padding: 0.3125rem 0.5rem;
 
     &.active {
-      background: $active-color;
-      color: $base-color;
+      background: $hf_shell_primary;
+      color: $hf_shell_on_accent;
     }
   }
 
   button.screen-capture-start {
-    background: $active-color;
-    color: $base-color;
+    background: $hf_shell_primary;
+    color: $hf_shell_on_accent;
     margin-top: 0.875rem;
     padding: 0.4375rem 0.625rem;
 
@@ -610,8 +632,8 @@ window.Bar {
     }
 
     &:hover {
-      background: #7cc7ff;
-      color: $base-color;
+      background: $hf_shell_primary_hover;
+      color: $hf_shell_on_accent;
     }
   }
 
@@ -626,7 +648,7 @@ window.Bar {
   .bluetooth-device-status,
   .bluetooth-profile-title,
   .network-row-status {
-    color: $low-color;
+    color: $hf_shell_on_surface;
     font-size: 0.72rem;
   }
 
@@ -644,7 +666,7 @@ window.Bar {
   }
 
   .system-monitor-metric-label {
-    color: $low-color;
+    color: $hf_shell_on_surface;
     font-size: 0.72rem;
   }
 
@@ -654,8 +676,8 @@ window.Bar {
   }
 
   .system-monitor-graph {
-    background: $base-color;
-    border: 1px solid $border-color;
+    background: $hf_shell_surface_raised;
+    border: 1px solid $hf_shell_border;
     border-radius: 0.375rem;
     margin-top: 0.625rem;
   }
@@ -669,7 +691,7 @@ window.Bar {
   }
 
   .network-toolbar-title {
-    color: $low-color;
+    color: $hf_shell_on_surface;
     font-size: 0.72rem;
   }
 
@@ -704,7 +726,7 @@ window.Bar {
   }
 
   .bluetooth-empty {
-    color: $low-color;
+    color: $hf_shell_muted;
     margin: 1rem 0;
 
     label {
@@ -713,7 +735,7 @@ window.Bar {
   }
 
   .network-empty {
-    color: $low-color;
+    color: $hf_shell_muted;
     margin: 1rem 0;
 
     label {
@@ -732,8 +754,8 @@ window.Bar {
   }
 
   .network-row {
-    background: $base-color;
-    border: 1px solid $border-color;
+    background: $hf_shell_surface_raised;
+    border: 1px solid $hf_shell_border;
     border-radius: 0.375rem;
     margin-top: 0.625rem;
     padding: 0.75rem;
@@ -747,7 +769,7 @@ window.Bar {
     }
 
     &.active {
-      border-color: $active-color;
+      border-color: $hf_shell_primary;
     }
   }
 
@@ -760,7 +782,7 @@ window.Bar {
   }
 
   button.network-connect {
-    border: 1px solid $border-color;
+    border: 1px solid $hf_shell_border;
     min-height: 1.875rem;
     min-width: 6.75rem;
     padding: 0.25rem 0.5rem;
@@ -770,14 +792,14 @@ window.Bar {
     }
 
     &.active {
-      background: $critical-bg;
-      color: $critical-color;
+      background: $hf_shell_danger_bg;
+      color: $hf_shell_danger;
     }
   }
 
   .bluetooth-device-row {
-    background: $base-color;
-    border: 1px solid $border-color;
+    background: $hf_shell_surface_raised;
+    border: 1px solid $hf_shell_border;
     border-radius: 0.375rem;
     margin-top: 0.625rem;
     padding: 0.75rem;
@@ -804,7 +826,7 @@ window.Bar {
   }
 
   button.bluetooth-connect {
-    border: 1px solid $border-color;
+    border: 1px solid $hf_shell_border;
     min-height: 1.875rem;
     min-width: 6.75rem;
     padding: 0.25rem 0.5rem;
@@ -814,8 +836,8 @@ window.Bar {
     }
 
     &.active {
-      background: $critical-bg;
-      color: $critical-color;
+      background: $hf_shell_danger_bg;
+      color: $hf_shell_danger;
     }
   }
 
@@ -876,8 +898,8 @@ window.Bar {
     padding: 0;
 
     &.active {
-      background: $critical-bg;
-      color: $critical-color;
+      background: $hf_shell_danger_bg;
+      color: $hf_shell_danger;
     }
   }
 
@@ -889,7 +911,7 @@ window.Bar {
     }
 
     highlight {
-      background: $active-color;
+      background: $hf_shell_primary;
       border-radius: 999px;
     }
 
@@ -912,20 +934,20 @@ window.Notifications {
     padding: 1.125rem;
 
     &:hover {
-      background: $hover-color;
+      background: $hf_shell_surface_hover;
     }
 
     &.low {
       border-left: 0;
-      color: $low-color;
+      color: $hf_shell_on_surface;
     }
 
     &.normal {
-      border-left: 0.25rem solid $blue-color;
+      border-left: 0.25rem solid $hf_shell_primary;
     }
 
     &.critical {
-      border-left: 0.25rem solid $critical-color;
+      border-left: 0.25rem solid $hf_shell_danger;
     }
   }
 
@@ -938,12 +960,12 @@ window.Notifications {
     }
 
     block.filled {
-      background: $active-color;
+      background: $hf_shell_primary;
       border-radius: 999px;
     }
 
     &.low block.filled {
-      background: $low-color;
+      background: $hf_shell_muted;
     }
   }
 
@@ -961,7 +983,7 @@ window.Notifications {
   }
 
   .notification-body {
-    color: $fg-color;
+    color: $hf_shell_fg;
     margin-top: 0.25rem;
   }
 
@@ -970,16 +992,16 @@ window.Notifications {
   }
 
   .notification-action {
-    background: $hover-color;
-    border: 1px solid $border-color;
+    background: $hf_shell_surface_hover;
+    border: 1px solid $hf_shell_border;
     border-radius: 0.375rem;
-    color: $fg-color;
+    color: $hf_shell_fg;
     margin-top: 0.375rem;
     padding: 0.375rem 0.5rem;
 
     &:hover {
-      background: #343941;
-      border-color: $active-color;
+      background: $hf_shell_surface_hover;
+      border-color: $hf_shell_primary;
     }
   }
 
@@ -996,7 +1018,7 @@ window.Notifications {
     padding: 1rem 1.125rem;
 
     &:hover {
-      background: $bg-color;
+      background: $hf_shell_bg;
     }
   }
 
@@ -1017,7 +1039,7 @@ window.Notifications {
     }
 
     block.filled {
-      background: $active-color;
+      background: $hf_shell_primary;
       border-radius: 999px;
     }
   }
@@ -1025,7 +1047,7 @@ window.Notifications {
 
 window.Notifications {
   background: transparent;
-  color: $fg-color;
+  color: $hf_shell_fg;
 
   > box {
     margin: 1.5rem;
@@ -1033,25 +1055,25 @@ window.Notifications {
 }
 
 .notification-center-panel {
-  color: $fg-color;
+  color: $hf_shell_fg;
   min-width: 24rem;
 
   button {
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.375rem;
-    color: $fg-color;
+    color: $hf_shell_fg;
     padding: 0.375rem 0.5rem;
 
     &:hover {
-      background: $hover-color;
-      border-color: $border-color;
+      background: $hf_shell_surface_hover;
+      border-color: $hf_shell_border;
     }
   }
 
   button.dnd.active {
-    background: $active-color;
-    color: $base-color;
+    background: $hf_shell_primary;
+    color: $hf_shell_on_accent;
   }
 
   .notification-center-header-actions button {
@@ -1071,7 +1093,7 @@ window.Notifications {
   }
 
   .notification-empty {
-    color: #7f8490;
+    color: $hf_shell_muted;
     margin: 3rem 0;
 
     label {
@@ -1083,20 +1105,20 @@ window.Notifications {
 
 window.ScreenToolkitPin {
   background: transparent;
-  color: $fg-color;
+  color: $hf_shell_fg;
 
   .screen-toolkit-pin-frame {
-    background: $bg-color;
-    border: 1px solid $border-color;
+    background: $hf_shell_bg;
+    border: 1px solid $hf_shell_border;
   }
 
   .screen-toolkit-pin-header {
-    background: $base-color;
+    background: $hf_shell_surface_raised;
     padding: 0.375rem 0.5rem;
   }
 
   .screen-toolkit-pin-title {
-    color: $low-color;
+    color: $hf_shell_on_surface;
     font-size: 0.72rem;
   }
 
@@ -1104,17 +1126,17 @@ window.ScreenToolkitPin {
     background: transparent;
     border: 0;
     border-radius: 999px;
-    color: $fg-color;
+    color: $hf_shell_fg;
     min-height: 1.375rem;
     min-width: 1.375rem;
     padding: 0;
 
     &:hover {
-      background: $hover-color;
+      background: $hf_shell_surface_hover;
     }
   }
 
   picture {
-    background: #0f1117;
+    background: $hf_shell_pin_picture_bg;
   }
 }
