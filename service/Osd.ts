@@ -117,19 +117,31 @@ export function showScreenCaptureOsd(label: string, icon = "applets-screenshoote
 }
 
 // Show the OSD when volume or mute changes, but not when the default device itself changes.
+// Retargeting notifies id before volume/mute, so the baseline is re-read once that burst is over.
 function watchEndpoint(endpoint: AstalWp.Endpoint, show: () => void) {
-  let last = { id: endpoint.id, volume: endpoint.volume, mute: endpoint.mute }
+  const snapshot = () => ({ volume: endpoint.volume, mute: endpoint.mute })
+  let last = snapshot()
+  let retargetId = 0
 
   const update = () => {
-    const changed =
-      endpoint.id === last.id &&
-      (Math.abs(endpoint.volume - last.volume) > 0.005 || endpoint.mute !== last.mute)
+    if (retargetId !== 0) return
 
-    last = { id: endpoint.id, volume: endpoint.volume, mute: endpoint.mute }
+    const changed =
+      Math.abs(endpoint.volume - last.volume) > 0.005 || endpoint.mute !== last.mute
+
+    last = snapshot()
     if (changed && Date.now() >= suppressUntil) show()
   }
 
-  endpoint.connect("notify::id", update)
+  endpoint.connect("notify::id", () => {
+    if (retargetId !== 0) GLib.source_remove(retargetId)
+
+    retargetId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+      retargetId = 0
+      last = snapshot()
+      return GLib.SOURCE_REMOVE
+    })
+  })
   endpoint.connect("notify::mute", update)
   endpoint.connect("notify::volume", update)
 }

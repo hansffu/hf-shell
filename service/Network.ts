@@ -89,12 +89,15 @@ const accessPoints = wifi
   ? createBinding(wifi, "accessPoints")
   : createComputed((): WifiAccessPoint[] => [])
 
-// One entry per SSID, keeping the strongest access point.
+// One entry per SSID, keeping the strongest access point. Rescans update the strength of
+// existing access points without changing the list, so strength is tracked per access point.
 export const wifiAccessPoints = createComputed(() => {
   const active = activeAccessPoint()?.ssid ?? null
   const bySsid = new Map<string, WifiAccessPoint>()
 
   for (const accessPoint of accessPoints() ?? []) {
+    createBinding(accessPoint, "strength")()
+
     const ssid = accessPoint.ssid
     const current = ssid ? bySsid.get(ssid) : null
 

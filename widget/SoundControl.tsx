@@ -95,11 +95,12 @@ function DeviceDropdown({ kind }: { kind: EndpointKind }) {
 
 function ProfileRow({ endpoint }: { endpoint: AstalWp.Endpoint }) {
   const device = createBinding(endpoint, "device")
-  const activeProfileId = createBinding(endpoint, "device", "activeProfileId")
-  const profiles = createBinding(endpoint, "device", "profiles").as((items) =>
-    [...(items ?? [])]
-      .filter((profile) => profile.available !== AstalWp.Available.NO)
-      .sort(compareProfiles),
+  const activeProfileId = createBinding<number | null>(endpoint, "device", "activeProfileId")
+  const profiles = createBinding<AstalWp.Profile[] | null>(endpoint, "device", "profiles").as(
+    (items) =>
+      [...(items ?? [])]
+        .filter((profile) => profile.available !== AstalWp.Available.NO)
+        .sort(compareProfiles),
   )
   const showSwitcher = profiles.as((items) => items.length > 1)
 

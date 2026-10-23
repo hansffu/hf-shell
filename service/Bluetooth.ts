@@ -2,14 +2,28 @@ import AstalBluetooth from "gi://AstalBluetooth"
 import AstalWp from "gi://AstalWp"
 import GLib from "gi://GLib"
 import { execAsync } from "ags/process"
-import { createBinding, createComputed } from "gnim"
+import { createBinding, createComputed, createState } from "gnim"
 
 export type BluetoothDevice = AstalBluetooth.Device
 
 export const bluetooth = AstalBluetooth.get_default()
 const wp = AstalWp.get_default()
 
-export const adapterAvailable = createBinding(bluetooth, "adapter").as(Boolean)
+// `adapter` never emits notify, so availability follows the adapter add/remove signals.
+// adapter-removed fires before the adapter is dropped from the list, hence the idle.
+const [adapterAvailable, setAdapterAvailable] = createState(Boolean(bluetooth.adapter))
+
+function refreshAdapterAvailable() {
+  GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    setAdapterAvailable(Boolean(bluetooth.adapter))
+    return GLib.SOURCE_REMOVE
+  })
+}
+
+bluetooth.connect("adapter-added", refreshAdapterAvailable)
+bluetooth.connect("adapter-removed", refreshAdapterAvailable)
+
+export { adapterAvailable }
 export const bluetoothPowered = createBinding(bluetooth, "is_powered")
 
 const devices = createBinding(bluetooth, "devices")
