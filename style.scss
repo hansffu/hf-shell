@@ -1,3 +1,5 @@
+@use "sass:string";
+
 @define-color hf_shell_bg #1c1e24;
 @define-color hf_shell_surface #1c1f24;
 @define-color hf_shell_on_surface #bbc2cf;
@@ -10,26 +12,26 @@
 @define-color hf_shell_warning #e5c07b;
 @define-color hf_shell_on_accent #1c1f24;
 
-$hf_shell_bg: unquote("@hf_shell_bg");
-$hf_shell_surface: unquote("@hf_shell_surface");
-$hf_shell_on_surface: unquote("@hf_shell_on_surface");
-$hf_shell_border: unquote("@hf_shell_border");
-$hf_shell_fg: unquote("@hf_shell_fg");
-$hf_shell_muted: unquote("@hf_shell_muted");
-$hf_shell_primary: unquote("@hf_shell_primary");
-$hf_shell_secondary: unquote("@hf_shell_secondary");
-$hf_shell_danger: unquote("@hf_shell_danger");
-$hf_shell_warning: unquote("@hf_shell_warning");
-$hf_shell_on_accent: unquote("@hf_shell_on_accent");
+$hf_shell_bg: string.unquote("@hf_shell_bg");
+$hf_shell_surface: string.unquote("@hf_shell_surface");
+$hf_shell_on_surface: string.unquote("@hf_shell_on_surface");
+$hf_shell_border: string.unquote("@hf_shell_border");
+$hf_shell_fg: string.unquote("@hf_shell_fg");
+$hf_shell_muted: string.unquote("@hf_shell_muted");
+$hf_shell_primary: string.unquote("@hf_shell_primary");
+$hf_shell_secondary: string.unquote("@hf_shell_secondary");
+$hf_shell_danger: string.unquote("@hf_shell_danger");
+$hf_shell_warning: string.unquote("@hf_shell_warning");
+$hf_shell_on_accent: string.unquote("@hf_shell_on_accent");
 
-$hf_shell_surface_hover: unquote("shade(@hf_shell_surface, 1.12)");
-$hf_shell_surface_raised: unquote("shade(@hf_shell_surface, 1.2)");
-$hf_shell_primary_hover: unquote("shade(@hf_shell_primary, 1.15)");
-$hf_shell_secondary_hover: unquote("shade(@hf_shell_secondary, 1.15)");
-$hf_shell_workspace_empty: unquote("alpha(@hf_shell_secondary, 0.35)");
-$hf_shell_danger_bg: unquote("alpha(@hf_shell_danger, 0.16)");
-$hf_shell_danger_bg_hover: unquote("alpha(@hf_shell_danger, 0.24)");
-$hf_shell_pin_picture_bg: unquote("shade(@hf_shell_bg, 0.72)");
+$hf_shell_surface_hover: string.unquote("shade(@hf_shell_surface, 1.12)");
+$hf_shell_surface_raised: string.unquote("shade(@hf_shell_surface, 1.2)");
+$hf_shell_primary_hover: string.unquote("shade(@hf_shell_primary, 1.15)");
+$hf_shell_secondary_hover: string.unquote("shade(@hf_shell_secondary, 1.15)");
+$hf_shell_workspace_empty: string.unquote("alpha(@hf_shell_secondary, 0.35)");
+$hf_shell_danger_bg: string.unquote("alpha(@hf_shell_danger, 0.16)");
+$hf_shell_danger_bg_hover: string.unquote("alpha(@hf_shell_danger, 0.24)");
+$hf_shell_pin_picture_bg: string.unquote("shade(@hf_shell_bg, 0.72)");
 
 label {
     font-weight: normal;
