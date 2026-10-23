@@ -1,618 +1,250 @@
-import Gio from "gi://Gio"
+import AstalNetwork from "gi://AstalNetwork"
 import GLib from "gi://GLib"
+import NM from "gi://NM"
+import { execAsync } from "ags/process"
+import { createBinding, createComputed, createState } from "gnim"
 
-export type WifiAccessPoint = {
-  active: boolean
-  knownConnection: string | null
-  security: string
-  signal: number
-  ssid: string
-}
+export type WifiAccessPoint = AstalNetwork.AccessPoint
 
 export type VpnConnection = {
-  active: boolean
+  active: NM.ActiveConnection | null
+  connection: NM.RemoteConnection
   device: string
   name: string
-  type: string
 }
 
-export type WiredConnection = {
-  device: string
-  name: string
-  type: string
-}
+const VPN_TYPES = new Set([NM.SETTING_VPN_SETTING_NAME, NM.SETTING_WIREGUARD_SETTING_NAME])
 
-export type NetworkState = {
-  activeWired: WiredConnection | null
-  activeWifi: WifiAccessPoint | null
-  connectivity: string
-  networkingEnabled: boolean
-  vpnConnections: VpnConnection[]
-  wifiAccessPoints: WifiAccessPoint[]
-  wifiDevice: string | null
-  wifiEnabled: boolean
-}
+export const network = AstalNetwork.get_default()
+export const wifi = network.wifi
+const client = network.client
 
-export type NetworkSummary = {
-  activeVpnCount: number
-  activeWiredName: string | null
-  activeWifiName: string | null
-  networkingEnabled: boolean
-  wifiDevice: string | null
-  wifiEnabled: boolean
-}
+export const networkingEnabled = createBinding(client, "networkingEnabled")
+export const wifiEnabled = wifi ? createBinding(wifi, "enabled") : createComputed(() => false)
+export const activeAccessPoint = wifi
+  ? createBinding(wifi, "activeAccessPoint")
+  : createComputed((): WifiAccessPoint | null => null)
 
-export type WiredNetworkState = {
-  activeWired: WiredConnection | null
-  networkingEnabled: boolean
-}
-
-export type WifiNetworkState = {
-  activeWifi: WifiAccessPoint | null
-  networkingEnabled: boolean
-  wifiAccessPoints: WifiAccessPoint[]
-  wifiDevice: string | null
-  wifiEnabled: boolean
-}
-
-export type VpnNetworkState = {
-  vpnConnections: VpnConnection[]
-}
-
-type ActiveConnection = {
-  device: string
-  name: string
-  type: string
-}
-
-type SavedConnection = {
-  device: string
-  name: string
-  type: string
-}
-
-function bytesToString(bytes: Uint8Array) {
-  return String.fromCharCode(...bytes)
-}
-
-function runSync(args: string[]) {
-  try {
-    const [ok, stdout, stderr, status] = GLib.spawn_sync(
-      null,
-      args,
-      null,
-      GLib.SpawnFlags.SEARCH_PATH,
-      null,
-    )
-
-    if (!ok || status !== 0) {
-      void stderr
-      return null
-    }
-
-    return bytesToString(stdout ?? new Uint8Array()).trim()
-  } catch (error) {
-    void error
-    return null
+function readConnections() {
+  return {
+    active: (client.get_active_connections() ?? []).filter(Boolean),
+    saved: (client.get_connections() ?? []).filter(Boolean),
   }
 }
 
-function runAsync(args: string[]) {
-  try {
-    GLib.spawn_async(null, args, null, GLib.SpawnFlags.SEARCH_PATH, null)
-  } catch (error) {
-    void error
-  }
-}
+// libnm's connection lists can briefly hold objects that are being removed, so they are
+// snapshotted on idle after the change signals instead of read inside the notify handlers.
+const [connections, setConnections] = createState(readConnections())
+let connectionsRefreshId = 0
 
-function runOutputAsync(args: string[]) {
-  return new Promise<string | null>((resolve) => {
-    try {
-      const process = Gio.Subprocess.new(
-        args,
-        Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
-      )
+function scheduleConnectionsRefresh() {
+  if (connectionsRefreshId !== 0) return
 
-      process.communicate_utf8_async(null, null, (_process, result) => {
-        try {
-          const [ok, stdout] = process.communicate_utf8_finish(result)
-          const successful = ok && process.get_successful()
-
-          resolve(successful ? (stdout ?? "").trim() : null)
-        } catch (error) {
-          void error
-          resolve(null)
-        }
-      })
-    } catch (error) {
-      void error
-      resolve(null)
-    }
+  connectionsRefreshId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+    connectionsRefreshId = 0
+    setConnections(readConnections())
+    return GLib.SOURCE_REMOVE
   })
 }
 
-function nmcli(args: string[]) {
-  return runSync(["nmcli", "--terse", "--escape", "yes", ...args])
+for (const signal of [
+  "connection-added",
+  "connection-removed",
+  "active-connection-added",
+  "active-connection-removed",
+]) {
+  client.connect(signal, scheduleConnectionsRefresh)
 }
 
-function nmcliAsync(args: string[]) {
-  return runOutputAsync(["nmcli", "--terse", "--escape", "yes", ...args])
-}
+const activeConnections = connections.as(({ active }) => active)
+const savedConnections = connections.as(({ saved }) => saved)
 
-function parseEscapedLine(line: string) {
-  const fields: string[] = []
-  let current = ""
-  let escaping = false
+const knownSsids = savedConnections.as(
+  (saved) =>
+    new Set(
+      saved.flatMap((connection) => {
+        const ssid = connection.get_setting_wireless()?.get_ssid()?.get_data()
 
-  for (const char of line) {
-    if (escaping) {
-      current += char
-      escaping = false
-    } else if (char === "\\") {
-      escaping = true
-    } else if (char === ":") {
-      fields.push(current)
-      current = ""
-    } else {
-      current += char
-    }
-  }
-
-  fields.push(current)
-
-  return fields
-}
-
-function parseRows(output: string | null) {
-  if (!output) return []
-
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map(parseEscapedLine)
-}
-
-function normalizeType(type: string) {
-  return type.toLowerCase()
-}
-
-function isWifiType(type: string) {
-  return normalizeType(type).includes("wireless") || normalizeType(type) === "wifi"
-}
-
-function isWiredType(type: string) {
-  const lower = normalizeType(type)
-
-  return lower === "ethernet" || lower.includes("ethernet") || lower === "802-3-ethernet"
-}
-
-function isVpnType(type: string) {
-  const lower = normalizeType(type)
-
-  return lower === "vpn" || lower === "wireguard"
-}
-
-function getRadioState(name: string) {
-  return nmcli(["radio", name]) === "enabled"
-}
-
-function getNetworkingState() {
-  return nmcli(["networking"]) === "enabled"
-}
-
-function getConnectivity() {
-  return nmcli(["-f", "CONNECTIVITY", "general"]) || "unknown"
-}
-
-async function getConnectivityAsync() {
-  return (await nmcliAsync(["-f", "CONNECTIVITY", "general"])) || "unknown"
-}
-
-function getWifiDevice() {
-  const row = parseRows(nmcli(["-f", "DEVICE,TYPE,STATE", "device", "status"]))
-    .find(([, type]) => isWifiType(type ?? ""))
-
-  return row?.[0] || null
-}
-
-async function getWifiDeviceAsync() {
-  const row = parseRows(await nmcliAsync(["-f", "DEVICE,TYPE,STATE", "device", "status"]))
-    .find(([, type]) => isWifiType(type ?? ""))
-
-  return row?.[0] || null
-}
-
-function getSavedConnections() {
-  return parseRows(nmcli(["-f", "NAME,TYPE,DEVICE", "connection", "show"]))
-    .map(([name, type, device]) => ({
-      device: device || "",
-      name: name || "",
-      type: type || "",
-    }))
-    .filter((connection) => connection.name)
-}
-
-async function getSavedConnectionsAsync() {
-  return parseRows(await nmcliAsync(["-f", "NAME,TYPE,DEVICE", "connection", "show"]))
-    .map(([name, type, device]) => ({
-      device: device || "",
-      name: name || "",
-      type: type || "",
-    }))
-    .filter((connection) => connection.name)
-}
-
-function getActiveConnections() {
-  return parseRows(nmcli(["-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"]))
-    .map(([name, type, device]) => ({
-      device: device || "",
-      name: name || "",
-      type: type || "",
-    }))
-    .filter((connection) => connection.name)
-}
-
-async function getActiveConnectionsAsync() {
-  return parseRows(await nmcliAsync(["-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"]))
-    .map(([name, type, device]) => ({
-      device: device || "",
-      name: name || "",
-      type: type || "",
-    }))
-    .filter((connection) => connection.name)
-}
-
-function connectionSsid(connectionName: string) {
-  const ssid = nmcli(["-g", "802-11-wireless.ssid", "connection", "show", connectionName])
-
-  return ssid || connectionName
-}
-
-async function connectionSsidAsync(connectionName: string) {
-  const ssid = await nmcliAsync(["-g", "802-11-wireless.ssid", "connection", "show", connectionName])
-
-  return ssid || connectionName
-}
-
-function getKnownWifiMap(saved: SavedConnection[]) {
-  const known = new Map<string, string>()
-
-  for (const connection of saved.filter((item) => isWifiType(item.type))) {
-    known.set(connectionSsid(connection.name), connection.name)
-  }
-
-  return known
-}
-
-async function getKnownWifiMapAsync(saved: SavedConnection[]) {
-  const known = new Map<string, string>()
-
-  await Promise.all(
-    saved
-      .filter((item) => isWifiType(item.type))
-      .map(async (connection) => {
-        known.set(await connectionSsidAsync(connection.name), connection.name)
+        return ssid ? [NM.utils_ssid_to_utf8(ssid)] : []
       }),
+    ),
+)
+
+export const activeWired = createComputed(
+  () =>
+    activeConnections().find(
+      (connection) => connection.type === NM.SETTING_WIRED_SETTING_NAME,
+    ) ?? null,
+)
+
+function compareAccessPoints(left: WifiAccessPoint, right: WifiAccessPoint, active: string | null) {
+  return (
+    Number(right.ssid === active) - Number(left.ssid === active) ||
+    right.strength - left.strength ||
+    (left.ssid ?? "").localeCompare(right.ssid ?? "")
   )
-
-  return known
 }
 
-function compareAccessPoints(left: WifiAccessPoint, right: WifiAccessPoint) {
-  const active = Number(right.active) - Number(left.active)
+const accessPoints = wifi
+  ? createBinding(wifi, "accessPoints")
+  : createComputed((): WifiAccessPoint[] => [])
 
-  if (active !== 0) return active
-
-  return right.signal - left.signal || left.ssid.localeCompare(right.ssid)
-}
-
-function getWifiAccessPoints(known: Map<string, string>, active: ActiveConnection[]) {
-  const activeWifiNames = new Set(active.filter((item) => isWifiType(item.type)).map((item) => item.name))
+// One entry per SSID, keeping the strongest access point.
+export const wifiAccessPoints = createComputed(() => {
+  const active = activeAccessPoint()?.ssid ?? null
   const bySsid = new Map<string, WifiAccessPoint>()
 
-  for (const [activeFlag, ssid, signal, security] of parseRows(
-    nmcli(["-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "no"]),
-  )) {
-    if (!ssid) continue
+  for (const accessPoint of accessPoints() ?? []) {
+    const ssid = accessPoint.ssid
+    const current = ssid ? bySsid.get(ssid) : null
 
-    const candidate: WifiAccessPoint = {
-      active: activeFlag === "*",
-      knownConnection: known.get(ssid) ?? null,
-      security: security || "",
-      signal: Number(signal) || 0,
-      ssid,
-    }
-    const current = bySsid.get(ssid)
-
-    if (!current || candidate.active || candidate.signal > current.signal) bySsid.set(ssid, candidate)
-  }
-
-  for (const [ssid, connection] of known) {
-    const current = bySsid.get(ssid)
-
-    if (!current) {
-      bySsid.set(ssid, {
-        active: activeWifiNames.has(connection),
-        knownConnection: connection,
-        security: "",
-        signal: 0,
-        ssid,
-      })
-    } else if (!current.knownConnection) {
-      current.knownConnection = connection
+    if (ssid && (!current || accessPoint.strength > current.strength)) {
+      bySsid.set(ssid, accessPoint)
     }
   }
 
-  return [...bySsid.values()].sort(compareAccessPoints)
-}
+  return [...bySsid.values()].sort((left, right) => compareAccessPoints(left, right, active))
+})
 
-async function getWifiAccessPointsAsync(known: Map<string, string>, active: ActiveConnection[]) {
-  const activeWifiNames = new Set(active.filter((item) => isWifiType(item.type)).map((item) => item.name))
-  const bySsid = new Map<string, WifiAccessPoint>()
+export const vpnConnections = createComputed(() => {
+  const active = activeConnections()
 
-  for (const [activeFlag, ssid, signal, security] of parseRows(
-    await nmcliAsync(["-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "no"]),
-  )) {
-    if (!ssid) continue
-
-    const candidate: WifiAccessPoint = {
-      active: activeFlag === "*",
-      knownConnection: known.get(ssid) ?? null,
-      security: security || "",
-      signal: Number(signal) || 0,
-      ssid,
-    }
-    const current = bySsid.get(ssid)
-
-    if (!current || candidate.active || candidate.signal > current.signal) bySsid.set(ssid, candidate)
-  }
-
-  for (const [ssid, connection] of known) {
-    const current = bySsid.get(ssid)
-
-    if (!current) {
-      bySsid.set(ssid, {
-        active: activeWifiNames.has(connection),
-        knownConnection: connection,
-        security: "",
-        signal: 0,
-        ssid,
-      })
-    } else if (!current.knownConnection) {
-      current.knownConnection = connection
-    }
-  }
-
-  return [...bySsid.values()].sort(compareAccessPoints)
-}
-
-function getVpnConnections(saved: SavedConnection[], active: ActiveConnection[]) {
-  const activeByName = new Map(active.filter((item) => isVpnType(item.type)).map((item) => [item.name, item]))
-
-  return saved
-    .filter((connection) => isVpnType(connection.type))
-    .map((connection) => {
-      const activeConnection = activeByName.get(connection.name)
+  return savedConnections()
+    .filter((connection) => VPN_TYPES.has(connection.get_connection_type()))
+    .map((connection): VpnConnection => {
+      const activeConnection =
+        active.find((item) => item.uuid === connection.get_uuid()) ?? null
 
       return {
-        active: Boolean(activeConnection),
-        device: activeConnection?.device || connection.device,
-        name: connection.name,
-        type: connection.type,
+        active: activeConnection,
+        connection,
+        device: activeConnection?.get_devices()?.[0]?.get_iface() ?? "",
+        name: connection.get_id() ?? "",
       }
     })
-    .sort((left, right) => Number(right.active) - Number(left.active) || left.name.localeCompare(right.name))
+    .sort(
+      (left, right) =>
+        Number(Boolean(right.active)) - Number(Boolean(left.active)) ||
+        left.name.localeCompare(right.name),
+    )
+})
+
+export const activeVpnCount = createComputed(
+  () => vpnConnections().filter((connection) => connection.active).length,
+)
+
+export const networkStatus = createComputed(() => {
+  const wired = activeWired()
+  const accessPoint = activeAccessPoint()
+
+  if (!networkingEnabled()) return "Networking disabled"
+  if (accessPoint?.ssid) return accessPoint.ssid
+  if (wired) return `Ethernet: ${wired.id}`
+  if (!wifi) return "Wi-Fi unavailable"
+  if (!wifiEnabled()) return "Wi-Fi disabled"
+
+  return "Not connected"
+})
+
+const OFFLINE_ICON = "network-wireless-offline-symbolic"
+const primary = createBinding(network, "primary")
+const wifiIcon = wifi ? createBinding(wifi, "iconName") : createComputed(() => OFFLINE_ICON)
+const wiredIcon = network.wired
+  ? createBinding(network.wired, "iconName")
+  : createComputed(() => OFFLINE_ICON)
+
+export const networkIcon = createComputed(() => {
+  if (!networkingEnabled()) return OFFLINE_ICON
+  if (primary() === AstalNetwork.Primary.WIFI) return wifiIcon()
+  if (primary() === AstalNetwork.Primary.WIRED) return wiredIcon()
+
+  return OFFLINE_ICON
+})
+
+function logError(error: unknown) {
+  console.error(error)
 }
 
-function getActiveWired(active: ActiveConnection[]): WiredConnection | null {
-  const connection = active.find((item) => isWiredType(item.type))
-
-  if (!connection) return null
-
-  return {
-    device: connection.device,
-    name: connection.name,
-    type: connection.type,
-  }
-}
-
-export function getNetworkState(): NetworkState {
-  const saved = getSavedConnections()
-  const active = getActiveConnections()
-  const knownWifi = getKnownWifiMap(saved)
-  const wifiAccessPoints = getWifiAccessPoints(knownWifi, active)
-  const activeWifi = wifiAccessPoints.find((accessPoint) => accessPoint.active) ?? null
-
-  return {
-    activeWired: getActiveWired(active),
-    activeWifi,
-    connectivity: getConnectivity(),
-    networkingEnabled: getNetworkingState(),
-    vpnConnections: getVpnConnections(saved, active),
-    wifiAccessPoints,
-    wifiDevice: getWifiDevice(),
-    wifiEnabled: getRadioState("wifi"),
-  }
-}
-
-export async function getNetworkStateAsync(): Promise<NetworkState> {
-  const [saved, active, connectivity, networkingEnabled, wifiDevice, wifiEnabled] = await Promise.all([
-    getSavedConnectionsAsync(),
-    getActiveConnectionsAsync(),
-    getConnectivityAsync(),
-    nmcliAsync(["networking"]).then((state) => state === "enabled"),
-    getWifiDeviceAsync(),
-    nmcliAsync(["radio", "wifi"]).then((state) => state === "enabled"),
-  ])
-  const knownWifi = await getKnownWifiMapAsync(saved)
-  const wifiAccessPoints = await getWifiAccessPointsAsync(knownWifi, active)
-  const activeWifi = wifiAccessPoints.find((accessPoint) => accessPoint.active) ?? null
-  const vpnConnections = getVpnConnections(saved, active)
-
-  return {
-    activeWired: getActiveWired(active),
-    activeWifi,
-    connectivity,
-    networkingEnabled,
-    vpnConnections,
-    wifiAccessPoints,
-    wifiDevice,
-    wifiEnabled,
-  }
-}
-
-export async function getWiredNetworkStateAsync(): Promise<WiredNetworkState> {
-  const [active, networkingEnabled] = await Promise.all([
-    getActiveConnectionsAsync(),
-    nmcliAsync(["networking"]).then((state) => state === "enabled"),
-  ])
-
-  return {
-    activeWired: getActiveWired(active),
-    networkingEnabled,
-  }
-}
-
-export async function getWifiNetworkStateAsync(): Promise<WifiNetworkState> {
-  const [saved, active, networkingEnabled, wifiDevice, wifiEnabled] = await Promise.all([
-    getSavedConnectionsAsync(),
-    getActiveConnectionsAsync(),
-    nmcliAsync(["networking"]).then((state) => state === "enabled"),
-    getWifiDeviceAsync(),
-    nmcliAsync(["radio", "wifi"]).then((state) => state === "enabled"),
-  ])
-  const knownWifi = await getKnownWifiMapAsync(saved)
-  const wifiAccessPoints =
-    networkingEnabled && wifiDevice && wifiEnabled ? await getWifiAccessPointsAsync(knownWifi, active) : []
-  const activeWifi = wifiAccessPoints.find((accessPoint) => accessPoint.active) ?? null
-
-  return {
-    activeWifi,
-    networkingEnabled,
-    wifiAccessPoints,
-    wifiDevice,
-    wifiEnabled,
-  }
-}
-
-export async function getVpnNetworkStateAsync(): Promise<VpnNetworkState> {
-  const [saved, active] = await Promise.all([getSavedConnectionsAsync(), getActiveConnectionsAsync()])
-
-  return {
-    vpnConnections: getVpnConnections(saved, active),
-  }
-}
-
-export function getNetworkSummary(): NetworkSummary {
-  const active = getActiveConnections()
-  const activeWifi = active.find((connection) => isWifiType(connection.type))
-  const activeWired = getActiveWired(active)
-  const networkingEnabled = getNetworkingState()
-
-  if (!networkingEnabled || activeWifi || activeWired) {
-    return {
-      activeVpnCount: active.filter((connection) => isVpnType(connection.type)).length,
-      activeWiredName: activeWired?.name ?? null,
-      activeWifiName: activeWifi?.name ?? null,
-      networkingEnabled,
-      wifiDevice: null,
-      wifiEnabled: true,
-    }
-  }
-
-  return {
-    activeVpnCount: active.filter((connection) => isVpnType(connection.type)).length,
-    activeWiredName: null,
-    activeWifiName: null,
-    networkingEnabled,
-    wifiDevice: getWifiDevice(),
-    wifiEnabled: getRadioState("wifi"),
-  }
-}
-
-export async function getNetworkSummaryAsync(): Promise<NetworkSummary> {
-  const [active, networkingEnabled] = await Promise.all([
-    getActiveConnectionsAsync(),
-    nmcliAsync(["networking"]).then((state) => state === "enabled"),
-  ])
-  const activeWifi = active.find((connection) => isWifiType(connection.type))
-  const activeWired = getActiveWired(active)
-  const activeVpnCount = active.filter((connection) => isVpnType(connection.type)).length
-
-  if (!networkingEnabled || activeWifi || activeWired) {
-    return {
-      activeVpnCount,
-      activeWiredName: activeWired?.name ?? null,
-      activeWifiName: activeWifi?.name ?? null,
-      networkingEnabled,
-      wifiDevice: null,
-      wifiEnabled: true,
-    }
-  }
-
-  const [wifiDevice, wifiEnabled] = await Promise.all([
-    getWifiDeviceAsync(),
-    nmcliAsync(["radio", "wifi"]).then((state) => state === "enabled"),
-  ])
-
-  return {
-    activeVpnCount,
-    activeWiredName: null,
-    activeWifiName: null,
-    networkingEnabled,
-    wifiDevice,
-    wifiEnabled,
-  }
-}
-
-export function connectNetworkStateSignals(refresh: () => void) {
-  const timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
-    refresh()
-    return GLib.SOURCE_CONTINUE
-  })
-
-  return () => GLib.source_remove(timer)
+export function isKnownAccessPoint(accessPoint: WifiAccessPoint) {
+  return Boolean(accessPoint.ssid && knownSsids().has(accessPoint.ssid))
 }
 
 export function setWifiEnabled(enabled: boolean) {
-  runAsync(["nmcli", "radio", "wifi", enabled ? "on" : "off"])
-}
-
-export function connectWifi(accessPoint: WifiAccessPoint) {
-  if (accessPoint.knownConnection) {
-    runAsync(["nmcli", "connection", "up", accessPoint.knownConnection])
-    return
-  }
-
-  runAsync(["nmcli", "device", "wifi", "connect", accessPoint.ssid])
-}
-
-export function disconnectWifi(device: string | null) {
-  if (device) runAsync(["nmcli", "device", "disconnect", device])
+  if (wifi && wifi.enabled !== enabled) wifi.enabled = enabled
 }
 
 export function rescanWifi() {
-  runAsync(["nmcli", "device", "wifi", "rescan"])
+  wifi?.scan()
 }
 
-export function connectVpn(connection: VpnConnection) {
-  runAsync(["nmcli", "connection", "up", connection.name])
+export function connectWifi(accessPoint: WifiAccessPoint) {
+  if (!wifi) return
+
+  if (isKnownAccessPoint(accessPoint)) {
+    accessPoint.activate(null, (_source, result) => {
+      try {
+        accessPoint.activate_finish(result)
+      } catch (error) {
+        logError(error)
+      }
+    })
+    return
+  }
+
+  // Let NetworkManager fill in security settings and ask the secret agent for a password.
+  client.add_and_activate_connection_async(
+    null,
+    wifi.device,
+    accessPoint.get_path(),
+    null,
+    (_source, result) => {
+      try {
+        client.add_and_activate_connection_finish(result)
+      } catch (error) {
+        logError(error)
+      }
+    },
+  )
 }
 
-export function disconnectVpn(connection: VpnConnection) {
-  runAsync(["nmcli", "connection", "down", connection.name])
+export function disconnectWifi() {
+  wifi?.deactivate_connection((_source, result) => {
+    try {
+      wifi.deactivate_connection_finish(result)
+    } catch (error) {
+      logError(error)
+    }
+  })
 }
 
-function launchFirstAvailable(candidates: string[][]) {
-  const command = candidates.find(([program]) => GLib.find_program_in_path(program))
+export function connectVpn(vpn: VpnConnection) {
+  client.activate_connection_async(vpn.connection, null, null, null, (_source, result) => {
+    try {
+      client.activate_connection_finish(result)
+    } catch (error) {
+      logError(error)
+    }
+  })
+}
 
-  if (command) runAsync(command)
+export function disconnectVpn(vpn: VpnConnection) {
+  if (!vpn.active) return
+
+  client.deactivate_connection_async(vpn.active, null, (_source, result) => {
+    try {
+      client.deactivate_connection_finish(result)
+    } catch (error) {
+      logError(error)
+    }
+  })
 }
 
 export function openNetworkManager() {
-  launchFirstAvailable([
+  const command = [
     ["nm-connection-editor"],
     ["gnome-control-center", "network"],
     ["systemsettings", "kcm_networkmanagement"],
-  ])
+  ].find(([program]) => GLib.find_program_in_path(program))
+
+  if (command) execAsync(command).catch(logError)
 }

@@ -1,5 +1,5 @@
 import AstalBattery from "gi://AstalBattery"
-import { createState } from "gnim"
+import { createBinding, createComputed } from "gnim"
 
 export type PowerState = {
   available: boolean
@@ -43,60 +43,49 @@ function chargeClass(percentage: number, charging: boolean) {
   return "high"
 }
 
-function readPowerState(): PowerState {
-  if (!battery?.is_battery || !battery.is_present) {
+const unavailable: PowerState = {
+  available: false,
+  charging: false,
+  className: "power-control-content unavailable",
+  iconName: "battery-missing-symbolic",
+  label: "--",
+  percentage: 0,
+  status: "No battery",
+  tooltip: "No battery detected",
+}
+
+function createPowerState(device: AstalBattery.Device) {
+  const isBattery = createBinding(device, "is_battery")
+  const isPresent = createBinding(device, "is_present")
+  const percentage = createBinding(device, "percentage").as(clamp)
+  const charging = createBinding(device, "charging")
+  const iconName = createBinding(device, "battery_icon_name")
+  const timeToEmpty = createBinding(device, "time_to_empty")
+  const timeToFull = createBinding(device, "time_to_full")
+
+  return createComputed((): PowerState => {
+    if (!isBattery() || !isPresent()) return unavailable
+
+    const duration = formatDuration(charging() ? timeToFull() : timeToEmpty())
+    const status = charging() ? "Charging" : "On battery"
+    const timeLabel = charging() ? "Time until full" : "Time remaining"
+    const tooltip = [
+      `Battery ${percent(percentage())}`,
+      status,
+      duration ? `${timeLabel}: ${duration}` : "",
+    ].filter(Boolean).join("\n")
+
     return {
-      available: false,
-      charging: false,
-      className: "power-control-content unavailable",
-      iconName: "battery-missing-symbolic",
-      label: "--",
-      percentage: 0,
-      status: "No battery",
-      tooltip: "No battery detected",
+      available: true,
+      charging: charging(),
+      className: `power-control-content ${chargeClass(percentage(), charging())}`,
+      iconName: iconName() || "battery-missing-symbolic",
+      label: percent(percentage()),
+      percentage: percentage(),
+      status,
+      tooltip,
     }
-  }
-
-  const percentage = clamp(battery.percentage)
-  const charging = battery.charging
-  const duration = formatDuration(charging ? battery.time_to_full : battery.time_to_empty)
-  const status = charging ? "Charging" : "On battery"
-  const timeLabel = charging ? "Time until full" : "Time remaining"
-  const tooltip = [
-    `Battery ${percent(percentage)}`,
-    status,
-    duration ? `${timeLabel}: ${duration}` : "",
-  ].filter(Boolean).join("\n")
-
-  return {
-    available: true,
-    charging,
-    className: `power-control-content ${chargeClass(percentage, charging)}`,
-    iconName: battery.battery_icon_name || "battery-missing-symbolic",
-    label: percent(percentage),
-    percentage,
-    status,
-    tooltip,
-  }
+  })
 }
 
-export const [powerState, setPowerState] = createState<PowerState>(readPowerState())
-
-function refreshPowerState() {
-  setPowerState(readPowerState())
-}
-
-if (battery) {
-  for (const property of [
-    "battery-icon-name",
-    "charging",
-    "is-battery",
-    "is-present",
-    "percentage",
-    "state",
-    "time-to-empty",
-    "time-to-full",
-  ]) {
-    battery.connect(`notify::${property}`, refreshPowerState)
-  }
-}
+export const powerState = battery ? createPowerState(battery) : createComputed(() => unavailable)

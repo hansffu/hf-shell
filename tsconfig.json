@@ -12,6 +12,8 @@
       "ags/gtk4": ["types/ags-gtk4.d.ts"],
       "ags/gtk4/app": ["types/ags-gtk4-app.d.ts"],
       "ags/gtk4/jsx-runtime": ["types/ags-gtk4-jsx-runtime.d.ts"],
+      "ags/file": ["types/ags-file.d.ts"],
+      "ags/process": ["types/ags-process.d.ts"],
       "ags/time": ["types/ags-time.d.ts"],
       "gnim": ["types/gnim.d.ts"]
     },

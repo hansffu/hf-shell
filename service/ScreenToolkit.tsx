@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app"
 import { Gdk, Gtk } from "ags/gtk4"
 import GLib from "gi://GLib"
+import { execAsync } from "ags/process"
 import { showScreenCaptureOsd } from "./Osd"
 
 export type ScreenToolkitCommand =
@@ -29,22 +30,16 @@ const scriptPath = GLib.build_filenamev([sourceRoot, "scripts", "screen-toolkit"
 
 let nextPinId = 0
 
-function bytesToString(bytes: Uint8Array) {
-  return String.fromCharCode(...bytes)
+function screenToolkit(...args: string[]) {
+  return execAsync(["sh", scriptPath, ...args])
 }
 
-function spawnArgs(command: string) {
-  return ["sh", scriptPath, command]
-}
-
-function spawnScreenToolkit(args: string[]) {
-  GLib.spawn_async(
-    null,
-    ["sh", scriptPath, ...args],
-    null,
-    GLib.SpawnFlags.SEARCH_PATH,
-    null,
-  )
+async function screenToolkitOutput(command: string) {
+  try {
+    return (await screenToolkit(command)).split("\n")[0] || null
+  } catch {
+    return null
+  }
 }
 
 function commandOsd(command: ScreenToolkitCommand) {
@@ -88,14 +83,10 @@ function captureScopeLabel(scope: CaptureScope) {
 }
 
 export function runScreenToolkit(command: ScreenToolkitCommand) {
-  try {
-    const osd = commandOsd(command)
+  const osd = commandOsd(command)
 
-    if (osd) showScreenCaptureOsd(osd[0], osd[1])
-    spawnScreenToolkit([command])
-  } catch (error) {
-    void error
-  }
+  if (osd) showScreenCaptureOsd(osd[0], osd[1])
+  screenToolkit(command).catch(console.error)
 }
 
 export function startScreenCapture(
@@ -103,56 +94,29 @@ export function startScreenCapture(
   scope: CaptureScope,
   durationSeconds: number,
 ) {
-  try {
-    const duration = durationSeconds > 0 ? String(durationSeconds) : ""
-    const durationLabel = durationSeconds > 0 ? `${durationSeconds}s ` : ""
+  const duration = durationSeconds > 0 ? String(durationSeconds) : ""
+  const durationLabel = durationSeconds > 0 ? `${durationSeconds}s ` : ""
 
-    showScreenCaptureOsd(
-      `Recording ${durationLabel}${captureScopeLabel(scope)} ${format.toUpperCase()}`,
-      "media-record-symbolic",
-    )
-    spawnScreenToolkit(["capture", format, scope, duration])
-  } catch (error) {
-    void error
-  }
+  showScreenCaptureOsd(
+    `Recording ${durationLabel}${captureScopeLabel(scope)} ${format.toUpperCase()}`,
+    "media-record-symbolic",
+  )
+  screenToolkit("capture", format, scope, duration).catch(console.error)
 }
 
-function runScreenToolkitSync(command: string) {
-  try {
-    const [ok, stdout, stderr, status] = GLib.spawn_sync(
-      null,
-      spawnArgs(command),
-      null,
-      GLib.SpawnFlags.SEARCH_PATH,
-      null,
-    )
-
-    if (!ok || status !== 0) {
-      void stderr
-      return null
-    }
-
-    const output = bytesToString(stdout).trim()
-    return output.length > 0 ? output.split("\n")[0] : null
-  } catch (error) {
-    void error
-    return null
-  }
+export async function screenToolkitStatus() {
+  return (await screenToolkitOutput("status")) ?? "idle"
 }
 
-export function screenToolkitStatus() {
-  return runScreenToolkitSync("status") ?? "idle"
-}
-
-export function pinRegion(gdkmonitor: Gdk.Monitor) {
+export async function pinRegion(gdkmonitor: Gdk.Monitor) {
   showScreenCaptureOsd("Select region to pin", "insert-image-symbolic")
-  const file = runScreenToolkitSync("pin-region")
+  const file = await screenToolkitOutput("pin-region")
   if (file) createPinnedImage(file, gdkmonitor)
 }
 
-export function pinImage(gdkmonitor: Gdk.Monitor) {
+export async function pinImage(gdkmonitor: Gdk.Monitor) {
   showScreenCaptureOsd("Choose image to pin", "folder-pictures-symbolic")
-  const file = runScreenToolkitSync("pick-file")
+  const file = await screenToolkitOutput("pick-file")
   if (file) createPinnedImage(file, gdkmonitor)
 }
 

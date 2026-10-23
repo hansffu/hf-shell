@@ -1,4 +1,5 @@
 import { Gtk } from "ags/gtk4"
+import { readFile as readTextFile } from "ags/file"
 import GLib from "gi://GLib"
 import { createState } from "gnim"
 import { PanelPopover } from "./LazyPopoverContent"
@@ -67,21 +68,10 @@ const cpuTempHistory: number[] = []
 const memoryHistory: number[] = []
 let previousCpuSnapshot: CpuSnapshot | null = null
 
-function bytesToString(bytes: Uint8Array) {
-  let output = ""
-
-  for (const byte of bytes) output += String.fromCharCode(byte)
-
-  return output
-}
-
 function readFile(path: string) {
   try {
-    const [ok, bytes] = GLib.file_get_contents(path)
-
-    return ok ? bytesToString(bytes) : ""
-  } catch (error) {
-    void error
+    return readTextFile(path)
+  } catch {
     return ""
   }
 }

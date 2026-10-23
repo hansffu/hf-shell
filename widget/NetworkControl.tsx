@@ -1,96 +1,46 @@
 import { Gtk } from "ags/gtk4"
-import GLib from "gi://GLib"
-import { createState, onCleanup } from "gnim"
+import { createBinding, createComputed, createState, For, With } from "gnim"
+import type { Accessor } from "gnim"
 import {
   type VpnConnection,
-  type VpnNetworkState,
   type WifiAccessPoint,
-  type WifiNetworkState,
-  type WiredConnection,
-  type WiredNetworkState,
-  getNetworkSummaryAsync,
-  connectNetworkStateSignals,
+  activeAccessPoint,
+  activeVpnCount,
+  activeWired,
   connectVpn,
   connectWifi,
   disconnectVpn,
   disconnectWifi,
-  getVpnNetworkStateAsync,
-  getWifiNetworkStateAsync,
-  getWiredNetworkStateAsync,
+  isKnownAccessPoint,
+  networkIcon,
+  networkingEnabled,
+  networkStatus,
   openNetworkManager,
   rescanWifi,
   setWifiEnabled,
+  vpnConnections,
+  wifi,
+  wifiAccessPoints,
+  wifiEnabled,
 } from "../service/Network"
+import { closePanels } from "../service/Panels"
 import { PanelPopover } from "./LazyPopoverContent"
 import Panel, { PanelSection } from "./Panel"
-
-type NetworkButtonControls = {
-  icon: Gtk.Image
-  label: Gtk.Label
-}
-
-type NetworkListControls = {
-  ethernetList: Gtk.Box
-  list: Gtk.Box
-  statusLabel: Gtk.Label
-  vpnList: Gtk.Box
-  wifiSwitch: Gtk.Switch
-}
-
-type NetworkSummary = Awaited<ReturnType<typeof getNetworkSummaryAsync>>
 
 const NETWORK_ROW_HEIGHT = 58
 const NETWORK_ROW_SPACING = 10
 
-function clearBox(box: Gtk.Box) {
-  let child = box.get_first_child()
-
-  while (child) {
-    box.remove(child)
-    child = box.get_first_child()
-  }
+type EmptyStateProps = {
+  icon: string
+  label: string
 }
 
-function refreshSoon(refresh: () => void) {
-  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1200, () => {
-    refresh()
-    return GLib.SOURCE_REMOVE
-  })
-  GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3200, () => {
-    refresh()
-    return GLib.SOURCE_REMOVE
-  })
-}
+type Active = boolean | Accessor<boolean>
 
-function addClasses(widget: Gtk.Widget, classes: string) {
-  for (const className of classes.split(" ").filter(Boolean)) widget.add_css_class(className)
-}
+function whenActive<T>(active: Active, ifActive: T, otherwise: T) {
+  const pick = (value: boolean) => (value ? ifActive : otherwise)
 
-function createImage(iconName: string, pixelSize: number) {
-  const image = Gtk.Image.new_from_icon_name(iconName)
-
-  image.set_pixel_size(pixelSize)
-  image.use_fallback = true
-
-  return image
-}
-
-function createLabel(label: string, className = "", xalign: number | null = null) {
-  const widget = Gtk.Label.new(label)
-
-  if (className) addClasses(widget, className)
-  if (xalign !== null) widget.set_xalign(xalign)
-
-  return widget
-}
-
-function wifiIconName(signal: number, active: boolean) {
-  if (!active) return "network-wireless-signal-none-symbolic"
-  if (signal >= 80) return "network-wireless-signal-excellent-symbolic"
-  if (signal >= 55) return "network-wireless-signal-good-symbolic"
-  if (signal >= 30) return "network-wireless-signal-ok-symbolic"
-
-  return "network-wireless-signal-weak-symbolic"
+  return typeof active === "boolean" ? pick(active) : active.as(pick)
 }
 
 function vpnLabel(count: number) {
@@ -100,574 +50,291 @@ function vpnLabel(count: number) {
   return `${count} VPN`
 }
 
-function wifiStatusText(state: WifiNetworkState) {
-  if (!state.networkingEnabled) return "Networking disabled"
-  if (state.activeWifi) return state.activeWifi.ssid
-  if (!state.wifiDevice) return "Wi-Fi unavailable"
-  if (!state.wifiEnabled) return "Wi-Fi disabled"
-
-  return "Not connected"
-}
-
-function accessPointStatus(accessPoint: WifiAccessPoint) {
-  if (accessPoint.active) return "Connected"
-
-  const parts = [
-    accessPoint.signal > 0 ? `${accessPoint.signal}% signal` : "",
-    accessPoint.security ? "Secured" : "Open",
-    accessPoint.knownConnection ? "Known" : "",
-  ].filter(Boolean)
-
-  return parts.join(" - ")
-}
-
-function createEmptyState(iconName: string, label: string) {
-  const box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
-
-  addClasses(box, "network-empty")
-  box.append(createImage(iconName, 28))
-  box.append(createLabel(label))
-
-  return box
-}
-
-function networkIconName(state: NetworkSummary) {
-  if (state.activeWifiName) return "network-wireless-symbolic"
-  if (state.activeWiredName) return "network-wired-symbolic"
-
-  return "network-wireless-offline-symbolic"
-}
-
 function listHeightForRows(rows: number) {
   const spacingCount = Math.max(0, Math.ceil(rows) - 1)
 
   return Math.ceil(NETWORK_ROW_HEIGHT * rows + NETWORK_ROW_SPACING * spacingCount)
 }
 
-function setupListScroller(scroller: Gtk.ScrolledWindow, maxRows: number) {
-  scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-  scroller.set_min_content_height(listHeightForRows(1))
-  scroller.set_max_content_height(listHeightForRows(maxRows))
-  scroller.set_propagate_natural_height(true)
+function EmptyState({ icon, label }: EmptyStateProps) {
+  return (
+    <box class="network-empty" orientation={Gtk.Orientation.VERTICAL}>
+      <image iconName={icon} pixelSize={28} useFallback />
+      <label label={label} />
+    </box>
+  )
 }
 
-function setupNetworkButton(button: Gtk.MenuButton, controls: NetworkButtonControls) {
-  let requestId = 0
-
-  const refresh = () => {
-    const id = ++requestId
-
-    void getNetworkSummaryAsync()
-      .then((state) => {
-        if (id !== requestId) return
-
-        controls.icon.set_from_icon_name(
-          state.networkingEnabled ? networkIconName(state) : "network-wireless-offline-symbolic",
-        )
-        const label = vpnLabel(state.activeVpnCount)
-
-        controls.label.set_label(label)
-        controls.label.set_visible(label.length > 0)
-        button.set_tooltip_text(
-          state.activeVpnCount > 0
-            ? `${summaryStatusText(state)} - ${vpnLabel(state.activeVpnCount)}`
-            : summaryStatusText(state),
-        )
-      })
-      .catch((error) => {
-        void error
-        if (id !== requestId) return
-
-        controls.icon.set_from_icon_name("network-wireless-offline-symbolic")
-        controls.label.set_label("")
-        controls.label.set_visible(false)
-        button.set_tooltip_text("Network unavailable")
-      })
-  }
-
-  button.connect("map", refresh)
-  const disconnectStateSignals = connectNetworkStateSignals(refresh)
-  controls.icon.set_from_icon_name("network-wireless-symbolic")
-  controls.label.set_label("")
-  controls.label.set_visible(false)
-  button.set_tooltip_text("Network")
-  refresh()
-
-  onCleanup(disconnectStateSignals)
+function ListScroller({
+  children,
+  class: className,
+  maxRows,
+}: {
+  children: Gtk.Widget
+  class: string
+  maxRows: number
+}) {
+  return (
+    <scrolledwindow
+      class={`network-scroll ${className}`}
+      hscrollbarPolicy={Gtk.PolicyType.NEVER}
+      vscrollbarPolicy={Gtk.PolicyType.AUTOMATIC}
+      minContentHeight={listHeightForRows(1)}
+      maxContentHeight={listHeightForRows(maxRows)}
+      propagateNaturalHeight
+    >
+      {children}
+    </scrolledwindow>
+  )
 }
 
-function summaryStatusText(state: NetworkSummary) {
-  if (!state.networkingEnabled) return "Networking disabled"
-  if (state.activeWifiName) return state.activeWifiName
-  if (state.activeWiredName) return `Ethernet: ${state.activeWiredName}`
-  if (!state.wifiDevice) return "Wi-Fi unavailable"
-  if (!state.wifiEnabled) return "Wi-Fi disabled"
-
-  return "Not connected"
+function ConnectButton({
+  active,
+  activeIcon,
+  inactiveIcon,
+  onClicked,
+  tooltip,
+}: {
+  active: Active
+  activeIcon: string
+  inactiveIcon: string
+  onClicked: () => void
+  tooltip: [string, string]
+}) {
+  return (
+    <button
+      class={whenActive(active, "network-connect active", "network-connect")}
+      tooltipText={whenActive(active, ...tooltip)}
+      onClicked={onClicked}
+    >
+      <box orientation={Gtk.Orientation.HORIZONTAL}>
+        <image iconName={whenActive(active, activeIcon, inactiveIcon)} pixelSize={16} useFallback />
+        <label label={whenActive(active, "Disconnect", "Connect")} />
+      </box>
+    </button>
+  )
 }
 
-function setupNetworkList(controls: NetworkListControls) {
-  let currentWifiState: WifiNetworkState | null = null
-  let summaryRequestId = 0
-  let wiredRequestId = 0
-  let wifiRequestId = 0
-  let vpnRequestId = 0
-  let syncingSwitch = false
+function NetworkRow({
+  active,
+  children,
+  icon,
+  name,
+  status,
+}: {
+  active: Active
+  children?: Gtk.Widget
+  icon: string | Accessor<string>
+  name: string
+  status: string | Accessor<string>
+}) {
+  return (
+    <box
+      class={whenActive(active, "network-row active", "network-row")}
+      orientation={Gtk.Orientation.HORIZONTAL}
+    >
+      <image iconName={icon} pixelSize={18} useFallback />
+      <box class="network-row-labels" orientation={Gtk.Orientation.VERTICAL} hexpand>
+        <label class="network-row-name" xalign={0} label={name} />
+        <label class="network-row-status" xalign={0} label={status} />
+      </box>
+      {children}
+    </box>
+  )
+}
 
-  const showSummaryLoading = () => {
-    controls.statusLabel.set_label("Loading")
-  }
+function WifiRow({ accessPoint }: { accessPoint: WifiAccessPoint }) {
+  const active = createComputed(() => activeAccessPoint()?.ssid === accessPoint.ssid)
+  const strength = createBinding(accessPoint, "strength")
+  const status = createComputed(() => {
+    if (active()) return "Connected"
 
-  const showWiredLoading = () => {
-    clearBox(controls.ethernetList)
-    controls.ethernetList.append(createEmptyState("network-wired-symbolic", "Loading Ethernet"))
-  }
+    return [
+      strength() > 0 ? `${strength()}% signal` : "",
+      accessPoint.requires_password ? "Secured" : "Open",
+      isKnownAccessPoint(accessPoint) ? "Known" : "",
+    ]
+      .filter(Boolean)
+      .join(" - ")
+  })
 
-  const showWifiLoading = () => {
-    controls.wifiSwitch.set_sensitive(false)
-    clearBox(controls.list)
-    controls.list.append(createEmptyState("network-wireless-symbolic", "Loading networks"))
-  }
+  return (
+    <NetworkRow
+      active={active}
+      icon={createBinding(accessPoint, "iconName")}
+      name={accessPoint.ssid ?? ""}
+      status={status}
+    >
+      <ConnectButton
+        active={active}
+        activeIcon="network-wireless-offline-symbolic"
+        inactiveIcon="network-wireless-symbolic"
+        tooltip={["Disconnect", "Connect"]}
+        onClicked={() => {
+          if (active()) return disconnectWifi()
 
-  const showVpnLoading = () => {
-    clearBox(controls.vpnList)
-    controls.vpnList.append(createEmptyState("network-vpn-symbolic", "Loading VPN profiles"))
-  }
+          // Release the panel's keyboard grab so the secret agent's password dialog gets focus.
+          if (!isKnownAccessPoint(accessPoint)) closePanels()
+          connectWifi(accessPoint)
+        }}
+      />
+    </NetworkRow>
+  )
+}
 
-  const renderWired = (state: WiredNetworkState) => {
-    clearBox(controls.ethernetList)
+function VpnRow({ vpn }: { vpn: VpnConnection }) {
+  const active = Boolean(vpn.active)
 
-    if (!state.networkingEnabled) {
-      controls.ethernetList.append(createEmptyState("network-wired-disconnected-symbolic", "Networking disabled"))
-    } else if (state.activeWired) {
-      controls.ethernetList.append(createWiredRow(state.activeWired))
-    } else {
-      controls.ethernetList.append(createEmptyState("network-wired-disconnected-symbolic", "No Ethernet connection"))
-    }
-  }
+  return (
+    <NetworkRow
+      active={active}
+      icon="network-vpn-symbolic"
+      name={vpn.name}
+      status={active ? `Connected${vpn.device ? ` on ${vpn.device}` : ""}` : "Disconnected"}
+    >
+      <ConnectButton
+        active={active}
+        activeIcon="network-offline-symbolic"
+        inactiveIcon="network-vpn-symbolic"
+        tooltip={["Disconnect VPN", "Connect VPN"]}
+        onClicked={() => (active ? disconnectVpn(vpn) : connectVpn(vpn))}
+      />
+    </NetworkRow>
+  )
+}
 
-  const renderWifi = (state: WifiNetworkState) => {
-    currentWifiState = state
-    syncingSwitch = true
-    controls.wifiSwitch.set_active(state.wifiEnabled)
-    syncingSwitch = false
-    controls.wifiSwitch.set_sensitive(state.networkingEnabled && Boolean(state.wifiDevice))
-    clearBox(controls.list)
+function EthernetSection() {
+  const wired = createComputed(() => (networkingEnabled() ? activeWired() : null))
 
-    if (!state.networkingEnabled || !state.wifiDevice || !state.wifiEnabled) {
-      controls.list.append(
-        createEmptyState(
-          state.wifiDevice ? "network-wireless-offline-symbolic" : "dialog-warning-symbolic",
-          wifiStatusText(state),
-        ),
-      )
-    } else if (state.wifiAccessPoints.length === 0) {
-      controls.list.append(createEmptyState("network-wireless-signal-none-symbolic", "No Wi-Fi networks"))
-    } else {
-      for (const accessPoint of state.wifiAccessPoints) {
-        controls.list.append(createWifiRow(accessPoint, state.wifiDevice, refresh))
+  return (
+    <box class="network-ethernet-list" orientation={Gtk.Orientation.VERTICAL}>
+      <With value={wired}>
+        {(connection) => {
+          if (!connection) {
+            return (
+              <EmptyState
+                icon="network-wired-disconnected-symbolic"
+                label={networkingEnabled() ? "No Ethernet connection" : "Networking disabled"}
+              />
+            )
+          }
+
+          const device = connection.get_devices()?.[0]?.get_iface()
+
+          return (
+            <NetworkRow
+              active
+              icon="network-wired-symbolic"
+              name={connection.id}
+              status={device ? `Ethernet connected on ${device}` : "Ethernet connected"}
+            />
+          )
+        }}
+      </With>
+    </box>
+  )
+}
+
+function WifiSection() {
+  const available = createComputed(() => networkingEnabled() && Boolean(wifi) && wifiEnabled())
+  const accessPoints = createComputed(() => (available() ? wifiAccessPoints() : []))
+  const emptyState = createComputed((): EmptyStateProps | null => {
+    if (!available()) {
+      return {
+        icon: wifi ? "network-wireless-offline-symbolic" : "dialog-warning-symbolic",
+        label: networkStatus(),
       }
     }
-  }
 
-  const renderVpn = (state: VpnNetworkState) => {
-    clearBox(controls.vpnList)
-    if (state.vpnConnections.length === 0) {
-      controls.vpnList.append(createEmptyState("network-vpn-symbolic", "No VPN profiles"))
-    } else {
-      for (const connection of state.vpnConnections) {
-        controls.vpnList.append(createVpnRow(connection, refresh))
-      }
-    }
-  }
-
-  const refreshSummary = (loading: boolean) => {
-    const id = ++summaryRequestId
-
-    if (loading) showSummaryLoading()
-    void getNetworkSummaryAsync()
-      .then((state) => {
-        if (id !== summaryRequestId) return
-
-        controls.statusLabel.set_label(summaryStatusText(state))
-      })
-      .catch((error) => {
-        void error
-        if (id !== summaryRequestId) return
-
-        controls.statusLabel.set_label("Network unavailable")
-      })
-  }
-
-  const refreshWired = (loading: boolean) => {
-    const id = ++wiredRequestId
-
-    if (loading) showWiredLoading()
-    void getWiredNetworkStateAsync()
-      .then((state) => {
-        if (id !== wiredRequestId) return
-
-        renderWired(state)
-      })
-      .catch((error) => {
-        void error
-        if (id !== wiredRequestId) return
-
-        clearBox(controls.ethernetList)
-        controls.ethernetList.append(createEmptyState("dialog-warning-symbolic", "Ethernet unavailable"))
-      })
-  }
-
-  const refreshWifi = (loading: boolean) => {
-    const id = ++wifiRequestId
-
-    if (loading) showWifiLoading()
-    void getWifiNetworkStateAsync()
-      .then((state) => {
-        if (id !== wifiRequestId) return
-
-        renderWifi(state)
-      })
-      .catch((error) => {
-        void error
-        if (id !== wifiRequestId) return
-
-        controls.wifiSwitch.set_sensitive(false)
-        clearBox(controls.list)
-        controls.list.append(createEmptyState("dialog-warning-symbolic", "NetworkManager did not respond"))
-      })
-  }
-
-  const refreshVpn = (loading: boolean) => {
-    const id = ++vpnRequestId
-
-    if (loading) showVpnLoading()
-    void getVpnNetworkStateAsync()
-      .then((state) => {
-        if (id !== vpnRequestId) return
-
-        renderVpn(state)
-      })
-      .catch((error) => {
-        void error
-        if (id !== vpnRequestId) return
-
-        clearBox(controls.vpnList)
-        controls.vpnList.append(createEmptyState("network-vpn-symbolic", "VPN unavailable"))
-      })
-  }
-
-  const refresh = (loading = currentWifiState === null) => {
-    refreshSummary(loading)
-    refreshWired(loading)
-    refreshWifi(loading)
-    refreshVpn(loading)
-  }
-
-  const disconnectStateSignals = connectNetworkStateSignals(() => {
-    refresh(false)
-  })
-
-  const switchSignal = controls.wifiSwitch.connect("notify::active", (toggle: Gtk.Switch) => {
-    if (syncingSwitch || !currentWifiState) return
-
-    const state = currentWifiState
-
-    if (!state.networkingEnabled || !state.wifiDevice || toggle.active === state.wifiEnabled) return
-
-    setWifiEnabled(toggle.active)
-    refreshSoon(() => {
-      refreshSummary(true)
-      refreshWifi(true)
-    })
-  })
-
-  showSummaryLoading()
-  showWiredLoading()
-  showWifiLoading()
-  showVpnLoading()
-  refresh(false)
-
-  onCleanup(() => {
-    disconnectStateSignals()
-    controls.wifiSwitch.disconnect(switchSignal)
-  })
-
-  return refresh
-}
-
-function createWifiRow(accessPoint: WifiAccessPoint, wifiDevice: string | null, onRefresh: () => void) {
-  const row = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
-  const labels = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
-  const button = Gtk.Button.new()
-  const buttonContent = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
-
-  addClasses(row, accessPoint.active ? "network-row active" : "network-row")
-  addClasses(labels, "network-row-labels")
-  labels.set_hexpand(true)
-
-  row.append(createImage(wifiIconName(accessPoint.signal, true), 18))
-  labels.append(createLabel(accessPoint.ssid, "network-row-name", 0))
-  labels.append(createLabel(accessPointStatus(accessPoint), "network-row-status", 0))
-  row.append(labels)
-
-  addClasses(button, accessPoint.active ? "network-connect active" : "network-connect")
-  button.set_tooltip_text(accessPoint.active ? "Disconnect" : "Connect")
-  button.connect("clicked", () => {
-    if (accessPoint.active) {
-      disconnectWifi(wifiDevice)
-    } else {
-      connectWifi(accessPoint)
+    if (accessPoints().length === 0) {
+      return { icon: "network-wireless-signal-none-symbolic", label: "No Wi-Fi networks" }
     }
 
-    refreshSoon(onRefresh)
+    return null
   })
 
-  buttonContent.append(
-    createImage(accessPoint.active ? "network-wireless-offline-symbolic" : "network-wireless-symbolic", 16),
+  return (
+    <ListScroller class="network-wifi-scroll" maxRows={3.5}>
+      <box class="network-list" orientation={Gtk.Orientation.VERTICAL}>
+        <With value={emptyState}>{(state) => state && <EmptyState {...state} />}</With>
+        <For each={accessPoints}>{(accessPoint) => <WifiRow accessPoint={accessPoint} />}</For>
+      </box>
+    </ListScroller>
   )
-  buttonContent.append(createLabel(accessPoint.active ? "Disconnect" : "Connect"))
-  button.set_child(buttonContent)
-  row.append(button)
-
-  return row
 }
 
-function createWiredRow(connection: WiredConnection) {
-  const row = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
-  const labels = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
-
-  addClasses(row, "network-row active")
-  addClasses(labels, "network-row-labels")
-  labels.set_hexpand(true)
-
-  row.append(createImage("network-wired-symbolic", 18))
-  labels.append(createLabel(connection.name, "network-row-name", 0))
-  labels.append(
-    createLabel(
-      connection.device ? `Ethernet connected on ${connection.device}` : "Ethernet connected",
-      "network-row-status",
-      0,
-    ),
+function VpnSection() {
+  return (
+    <ListScroller class="network-vpn-scroll" maxRows={2.5}>
+      <box class="network-vpn-list" orientation={Gtk.Orientation.VERTICAL}>
+        <With value={vpnConnections.as((connections) => connections.length === 0)}>
+          {(empty) => empty && <EmptyState icon="network-vpn-symbolic" label="No VPN profiles" />}
+        </With>
+        <For each={vpnConnections}>{(vpn) => <VpnRow vpn={vpn} />}</For>
+      </box>
+    </ListScroller>
   )
-  row.append(labels)
-
-  return row
-}
-
-function createVpnRow(connection: VpnConnection, onRefresh: () => void) {
-  const row = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
-  const labels = Gtk.Box.new(Gtk.Orientation.VERTICAL, 0)
-  const button = Gtk.Button.new()
-  const buttonContent = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 0)
-
-  addClasses(row, connection.active ? "network-row active" : "network-row")
-  addClasses(labels, "network-row-labels")
-  labels.set_hexpand(true)
-
-  row.append(createImage("network-vpn-symbolic", 18))
-  labels.append(createLabel(connection.name, "network-row-name", 0))
-  labels.append(
-    createLabel(
-      connection.active ? `Connected${connection.device ? ` on ${connection.device}` : ""}` : "Disconnected",
-      "network-row-status",
-      0,
-    ),
-  )
-  row.append(labels)
-
-  addClasses(button, connection.active ? "network-connect active" : "network-connect")
-  button.set_tooltip_text(connection.active ? "Disconnect VPN" : "Connect VPN")
-  button.connect("clicked", () => {
-    if (connection.active) {
-      disconnectVpn(connection)
-    } else {
-      connectVpn(connection)
-    }
-
-    refreshSoon(onRefresh)
-  })
-
-  buttonContent.append(createImage(connection.active ? "network-offline-symbolic" : "network-vpn-symbolic", 16))
-  buttonContent.append(createLabel(connection.active ? "Disconnect" : "Connect"))
-  button.set_child(buttonContent)
-  row.append(button)
-
-  return row
 }
 
 export default function NetworkControl() {
   const [open, setOpen] = createState(false)
-  let buttonControls: Partial<NetworkButtonControls> = {}
-  let listControls: Partial<NetworkListControls> = {}
-  let menuButton: Gtk.MenuButton | null = null
-  let refreshList: (() => void) | null = null
-  let buttonSetupDone = false
-  let listSetupDone = false
-
-  const maybeSetupButton = () => {
-    if (buttonSetupDone || !menuButton || !buttonControls.icon || !buttonControls.label) return
-
-    buttonSetupDone = true
-    setupNetworkButton(menuButton, {
-      icon: buttonControls.icon,
-      label: buttonControls.label,
-    })
-  }
-
-  const maybeSetupList = () => {
-    if (
-      listSetupDone ||
-      !listControls.list ||
-      !listControls.statusLabel ||
-      !listControls.ethernetList ||
-      !listControls.vpnList ||
-      !listControls.wifiSwitch
-    ) {
-      return
-    }
-
-    listSetupDone = true
-    refreshList = setupNetworkList({
-      ethernetList: listControls.ethernetList,
-      list: listControls.list,
-      statusLabel: listControls.statusLabel,
-      vpnList: listControls.vpnList,
-      wifiSwitch: listControls.wifiSwitch,
-    })
-  }
-
-  const setPanelOpen = (next: boolean | ((current: boolean) => boolean)) => {
-    const openNext = typeof next === "function" ? next(open()) : next
-
-    if (!openNext) {
-      listControls = {}
-      listSetupDone = false
-      refreshList = null
-    }
-
-    setOpen(openNext)
-  }
+  const vpnText = activeVpnCount.as(vpnLabel)
+  const tooltip = createComputed(() =>
+    vpnText() ? `${networkStatus()} - ${vpnText()}` : networkStatus(),
+  )
 
   return (
     <menubutton
       class="network-control"
       direction={Gtk.ArrowType.RIGHT}
-      onNotifyActive={(button: Gtk.MenuButton) => setPanelOpen(button.active)}
-      $={(button) => {
-        menuButton = button
-        maybeSetupButton()
-      }}
+      tooltipText={tooltip}
+      onNotifyActive={(button: Gtk.MenuButton) => setOpen(button.active)}
     >
       <box class="network-control-content" orientation={Gtk.Orientation.VERTICAL}>
-        <image
-          iconName="network-wired-symbolic"
-          pixelSize={17}
-          useFallback
-          $={(image) => {
-            buttonControls = { ...buttonControls, icon: image }
-            maybeSetupButton()
-          }}
-        />
+        <image iconName={networkIcon} pixelSize={17} useFallback />
         <label
           class="network-control-vpn"
-          visible={false}
-          $={(label) => {
-            buttonControls = { ...buttonControls, label }
-            maybeSetupButton()
-          }}
+          label={vpnText}
+          visible={vpnText.as((text) => text.length > 0)}
         />
       </box>
-      <PanelPopover open={open} setOpen={setPanelOpen}>
+      <PanelPopover open={open} setOpen={setOpen}>
         {() => (
-        <Panel
-          title="Network"
-          class="network-menu"
-          headerEnd={
-            <label
-              class="network-menu-subtitle"
-              $={(label) => {
-                listControls = { ...listControls, statusLabel: label }
-                maybeSetupList()
-              }}
-            />
-          }
-        >
-          <box class="network-toolbar" orientation={Gtk.Orientation.HORIZONTAL}>
-            <label class="network-toolbar-title" label="Wi-Fi" xalign={0} hexpand />
-            <switch
-              class="network-wifi-power"
-              tooltipText="Wi-Fi power"
-              $={(toggle) => {
-                listControls = { ...listControls, wifiSwitch: toggle }
-                maybeSetupList()
-              }}
-            />
-            <button
-              class="network-rescan"
-              tooltipText="Rescan Wi-Fi"
-              onClicked={() => {
-                rescanWifi()
-                if (refreshList) refreshSoon(refreshList)
-              }}
-            >
-              <image iconName="view-refresh-symbolic" pixelSize={16} useFallback />
-            </button>
-            <button
-              class="network-manager"
-              tooltipText="Open network settings"
-              onClicked={() => {
-                openNetworkManager()
-              }}
-            >
-              <image iconName="preferences-system-network-symbolic" pixelSize={16} useFallback />
-            </button>
-          </box>
-          <PanelSection title="Ethernet">
-            <box
-              class="network-ethernet-list"
-              orientation={Gtk.Orientation.VERTICAL}
-              $={(box) => {
-                listControls = { ...listControls, ethernetList: box }
-                maybeSetupList()
-              }}
-            />
-          </PanelSection>
-          <PanelSection title="Wi-Fi">
-            <scrolledwindow
-              class="network-scroll network-wifi-scroll"
-              $={(scroller: Gtk.ScrolledWindow) => {
-                setupListScroller(scroller, 3.5)
-              }}
-            >
-              <box
-                class="network-list"
-                orientation={Gtk.Orientation.VERTICAL}
-                $={(box) => {
-                  listControls = { ...listControls, list: box }
-                  maybeSetupList()
-                }}
+          <Panel
+            title="Network"
+            class="network-menu"
+            headerEnd={<label class="network-menu-subtitle" label={networkStatus} />}
+          >
+            <box class="network-toolbar" orientation={Gtk.Orientation.HORIZONTAL}>
+              <label class="network-toolbar-title" label="Wi-Fi" xalign={0} hexpand />
+              <switch
+                class="network-wifi-power"
+                tooltipText="Wi-Fi power"
+                active={wifiEnabled}
+                sensitive={createComputed(() => networkingEnabled() && Boolean(wifi))}
+                onNotifyActive={(toggle: Gtk.Switch) => setWifiEnabled(toggle.active)}
               />
-            </scrolledwindow>
-          </PanelSection>
-          <PanelSection title="VPN">
-            <scrolledwindow
-              class="network-scroll network-vpn-scroll"
-              $={(scroller: Gtk.ScrolledWindow) => {
-                setupListScroller(scroller, 2.5)
-              }}
-            >
-              <box
-                class="network-vpn-list"
-                orientation={Gtk.Orientation.VERTICAL}
-                $={(box) => {
-                  listControls = { ...listControls, vpnList: box }
-                  maybeSetupList()
-                }}
-              />
-            </scrolledwindow>
-          </PanelSection>
-        </Panel>
+              <button class="network-rescan" tooltipText="Rescan Wi-Fi" onClicked={rescanWifi}>
+                <image iconName="view-refresh-symbolic" pixelSize={16} useFallback />
+              </button>
+              <button
+                class="network-manager"
+                tooltipText="Open network settings"
+                onClicked={openNetworkManager}
+              >
+                <image iconName="preferences-system-network-symbolic" pixelSize={16} useFallback />
+              </button>
+            </box>
+            <PanelSection title="Ethernet">
+              <EthernetSection />
+            </PanelSection>
+            <PanelSection title="Wi-Fi">
+              <WifiSection />
+            </PanelSection>
+            <PanelSection title="VPN">
+              <VpnSection />
+            </PanelSection>
+          </Panel>
         )}
       </PanelPopover>
     </menubutton>

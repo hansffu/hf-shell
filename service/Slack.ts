@@ -1,7 +1,8 @@
 import AstalNiri from "gi://AstalNiri"
 import AstalTray from "gi://AstalTray"
 import GLib from "gi://GLib"
-import { createState } from "gnim"
+import { readFile } from "ags/file"
+import { createPoll } from "ags/time"
 
 type SlackSource = {
   count: number
@@ -24,19 +25,6 @@ const countPatterns = [
   /\b(?:unread|notification|notifications|mention|mentions|message|messages|new item|new items)\D+(\d+)\b/i,
 ]
 
-export const [slackJsonUnreadCount, setSlackJsonUnreadCount] = createState<number | null>(null)
-export const [slackJsonUnreadWorkspaces, setSlackJsonUnreadWorkspaces] = createState<
-  SlackWorkspaceUnread[]
->([])
-
-function bytesToString(bytes: Uint8Array) {
-  let output = ""
-
-  for (const byte of bytes) output += String.fromCharCode(byte)
-
-  return output
-}
-
 function slackRootStatePath() {
   return GLib.build_filenamev([
     GLib.get_user_config_dir(),
@@ -48,10 +36,7 @@ function slackRootStatePath() {
 
 function readSlackRootState() {
   try {
-    const [ok, bytes] = GLib.file_get_contents(slackRootStatePath())
-
-    if (!ok) return null
-    return JSON.parse(bytesToString(bytes)) as {
+    return JSON.parse(readFile(slackRootStatePath())) as {
       webapp?: {
         teams?: Record<
           string,
@@ -73,22 +58,18 @@ function readSlackRootState() {
         }
       >
     }
-  } catch (error) {
-    void error
+  } catch {
     return null
   }
 }
 
-function readSlackJsonUnreadCount() {
+function readSlackJsonUnreads() {
   const state = readSlackRootState()
 
-  if (!state) {
-    setSlackJsonUnreadWorkspaces([])
-    return null
-  }
+  if (!state) return null
 
-  const teams = state?.webapp?.teams ?? {}
-  const workspaces = state?.workspaces ?? {}
+  const teams = state.webapp?.teams ?? {}
+  const workspaces = state.workspaces ?? {}
   const perTeam = Object.entries(teams).map(([teamId, team]) => {
     const unreads = team.unreads
     const workspace = workspaces[teamId]
@@ -103,20 +84,19 @@ function readSlackJsonUnreadCount() {
       teamId,
     }
   }).sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
-  const count = perTeam.reduce((total, team) => total + team.count, 0)
 
-  setSlackJsonUnreadWorkspaces(perTeam)
-  return count
+  return {
+    count: perTeam.reduce((total, team) => total + team.count, 0),
+    workspaces: perTeam,
+  }
 }
 
-function refreshSlackJsonUnreadCount() {
-  setSlackJsonUnreadCount(readSlackJsonUnreadCount())
+const slackJsonUnreads = createPoll(readSlackJsonUnreads(), 5000, readSlackJsonUnreads)
 
-  return GLib.SOURCE_CONTINUE
-}
-
-refreshSlackJsonUnreadCount()
-GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, refreshSlackJsonUnreadCount)
+export const slackJsonUnreadCount = slackJsonUnreads.as((unreads) => unreads?.count ?? null)
+export const slackJsonUnreadWorkspaces = slackJsonUnreads.as(
+  (unreads): SlackWorkspaceUnread[] => unreads?.workspaces ?? [],
+)
 
 function textFromParts(parts: Array<string | null | undefined>) {
   return parts.filter((part) => part && part.trim().length > 0).join(" ")

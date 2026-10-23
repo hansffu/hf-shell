@@ -1,5 +1,6 @@
 import app from "ags/gtk4/app"
 import { Gdk, Gtk } from "ags/gtk4"
+import { readFile } from "ags/file"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import { createRoot } from "gnim"
@@ -198,10 +199,7 @@ function parseThemeToml(contents: string) {
 function readRuntimeThemeColors(path: string) {
   if (!GLib.file_test(path, GLib.FileTest.EXISTS)) return {}
 
-  const file = Gio.File.new_for_path(path)
-  const [, contents] = file.load_contents(null)
-
-  return parseThemeToml(new TextDecoder().decode(contents as Uint8Array))
+  return parseThemeToml(readFile(path))
 }
 
 function themeColorCss(colors: Record<ThemeColorName, string>) {

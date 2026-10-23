@@ -28,8 +28,10 @@
     astalPackages = with ags.packages.${system}; [
       io
       astal4 # or astal3 for gtk3
+      apps
       battery
       bluetooth
+      network
       notifd
       tray
       wireplumber
@@ -59,7 +61,6 @@
 
     bluetoothPackages = with pkgs; [
       blueman
-      pulseaudio
     ];
 
     iconThemePackages = with pkgs; [

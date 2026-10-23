@@ -1,5 +1,6 @@
 import GLib from "gi://GLib"
 import AstalWp from "gi://AstalWp"
+import { readFile as readTextFile } from "ags/file"
 import { createComputed, createState } from "gnim"
 
 export type OsdKind = "volume" | "microphone" | "brightness" | "screenCapture"
@@ -23,47 +24,19 @@ const audio = wp.get_audio()
 export const [osdState, setOsdState] = createState<OsdState | null>(null)
 export const hasOsd = createComputed(() => osdState() !== null)
 
-function getDefaultSpeaker() {
-  const defaultSpeaker = [...(audio.get_speakers() ?? [])].find((endpoint) => endpoint.is_default)
-
-  return defaultSpeaker ?? audio.get_default_speaker()
-}
-
-function getDefaultMicrophone() {
-  const defaultMicrophone = [...(audio.get_microphones() ?? [])].find((endpoint) => endpoint.is_default)
-
-  return defaultMicrophone ?? audio.get_default_microphone()
-}
+// The default endpoints are stable proxies that follow whichever node is currently default.
+const speaker = audio.get_default_speaker()
+const microphone = audio.get_default_microphone()
 
 let hideTimer = 0
-let speaker = getDefaultSpeaker()
-let speakerSignals: number[] = []
-let lastSpeakerVolume = speaker.volume
-let lastSpeakerMute = speaker.mute
-let microphone = getDefaultMicrophone()
-let microphoneSignals: number[] = []
-let lastMicrophoneVolume = microphone.volume
-let lastMicrophoneMute = microphone.mute
 let brightnessDevice = ""
 let lastBrightness: number | null = null
-const suppressVolumeUntil = Date.now() + STARTUP_SUPPRESS_MS
-const suppressMicrophoneUntil = Date.now() + STARTUP_SUPPRESS_MS
-
-function bytesToString(bytes: Uint8Array) {
-  let output = ""
-
-  for (const byte of bytes) output += String.fromCharCode(byte)
-
-  return output
-}
+const suppressUntil = Date.now() + STARTUP_SUPPRESS_MS
 
 function readFile(path: string) {
   try {
-    const [ok, bytes] = GLib.file_get_contents(path)
-
-    return ok ? bytesToString(bytes).trim() : ""
-  } catch (error) {
-    void error
+    return readTextFile(path).trim()
+  } catch {
     return ""
   }
 }
@@ -81,8 +54,7 @@ function listDirectory(path: string) {
 
     dir.close()
     return files
-  } catch (error) {
-    void error
+  } catch {
     return []
   }
 }
@@ -144,91 +116,22 @@ export function showScreenCaptureOsd(label: string, icon = "applets-screenshoote
   })
 }
 
-function bindSpeaker() {
-  for (const signal of speakerSignals) speaker.disconnect(signal)
-  speakerSignals = []
-  speaker = getDefaultSpeaker()
-  lastSpeakerVolume = speaker.volume
-  lastSpeakerMute = speaker.mute
+// Show the OSD when volume or mute changes, but not when the default device itself changes.
+function watchEndpoint(endpoint: AstalWp.Endpoint, show: () => void) {
+  let last = { id: endpoint.id, volume: endpoint.volume, mute: endpoint.mute }
 
   const update = () => {
-    const volumeChanged = Math.abs(speaker.volume - lastSpeakerVolume) > 0.005
-    const muteChanged = speaker.mute !== lastSpeakerMute
+    const changed =
+      endpoint.id === last.id &&
+      (Math.abs(endpoint.volume - last.volume) > 0.005 || endpoint.mute !== last.mute)
 
-    lastSpeakerVolume = speaker.volume
-    lastSpeakerMute = speaker.mute
-
-    if (Date.now() < suppressVolumeUntil) return
-    if (volumeChanged || muteChanged) showVolume()
+    last = { id: endpoint.id, volume: endpoint.volume, mute: endpoint.mute }
+    if (changed && Date.now() >= suppressUntil) show()
   }
 
-  speakerSignals = [
-    speaker.connect("notify::mute", update),
-    speaker.connect("notify::volume", update),
-    speaker.connect("notify::volume-icon", update),
-  ]
-}
-
-function bindMicrophone() {
-  for (const signal of microphoneSignals) microphone.disconnect(signal)
-  microphoneSignals = []
-  microphone = getDefaultMicrophone()
-  lastMicrophoneVolume = microphone.volume
-  lastMicrophoneMute = microphone.mute
-
-  const update = () => {
-    const volumeChanged = Math.abs(microphone.volume - lastMicrophoneVolume) > 0.005
-    const muteChanged = microphone.mute !== lastMicrophoneMute
-
-    lastMicrophoneVolume = microphone.volume
-    lastMicrophoneMute = microphone.mute
-
-    if (Date.now() < suppressMicrophoneUntil) return
-    if (volumeChanged || muteChanged) showMicrophone()
-  }
-
-  microphoneSignals = [
-    microphone.connect("notify::mute", update),
-    microphone.connect("notify::volume", update),
-    microphone.connect("notify::volume-icon", update),
-  ]
-}
-
-function connectEndpointDefaultSignals(
-  kind: "speaker" | "microphone",
-  bindDefault: () => void,
-) {
-  let endpointSignals: Array<[AstalWp.Endpoint, number]> = []
-
-  const disconnectEndpoints = () => {
-    for (const [endpoint, signal] of endpointSignals) endpoint.disconnect(signal)
-    endpointSignals = []
-  }
-
-  const refresh = () => {
-    disconnectEndpoints()
-
-    const endpoints = kind === "speaker" ? audio.get_speakers() : audio.get_microphones()
-
-    endpointSignals = [...(endpoints ?? [])].map((endpoint) => [
-      endpoint,
-      endpoint.connect("notify::is-default", refresh),
-    ])
-
-    bindDefault()
-  }
-
-  if (kind === "speaker") {
-    audio.connect("notify::default-speaker", refresh)
-    audio.connect("speaker-added", refresh)
-    audio.connect("speaker-removed", refresh)
-  } else {
-    audio.connect("notify::default-microphone", refresh)
-    audio.connect("microphone-added", refresh)
-    audio.connect("microphone-removed", refresh)
-  }
-
-  refresh()
+  endpoint.connect("notify::id", update)
+  endpoint.connect("notify::mute", update)
+  endpoint.connect("notify::volume", update)
 }
 
 function findBrightnessDevice() {
@@ -282,7 +185,7 @@ function pollBrightness() {
   return GLib.SOURCE_CONTINUE
 }
 
-connectEndpointDefaultSignals("speaker", bindSpeaker)
-connectEndpointDefaultSignals("microphone", bindMicrophone)
+watchEndpoint(speaker, showVolume)
+watchEndpoint(microphone, showMicrophone)
 pollBrightness()
 GLib.timeout_add(GLib.PRIORITY_DEFAULT, BRIGHTNESS_POLL_MS, pollBrightness)

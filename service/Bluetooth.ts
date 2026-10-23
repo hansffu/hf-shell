@@ -1,116 +1,87 @@
 import AstalBluetooth from "gi://AstalBluetooth"
+import AstalWp from "gi://AstalWp"
 import GLib from "gi://GLib"
-
-const bluetooth = AstalBluetooth.get_default()
+import { execAsync } from "ags/process"
+import { createBinding, createComputed } from "gnim"
 
 export type BluetoothDevice = AstalBluetooth.Device
 
-export type BluetoothProfile = {
-  active: boolean
-  available: boolean
-  description: string
-  name: string
+export const bluetooth = AstalBluetooth.get_default()
+const wp = AstalWp.get_default()
+
+export const adapterAvailable = createBinding(bluetooth, "adapter").as(Boolean)
+export const bluetoothPowered = createBinding(bluetooth, "is_powered")
+
+const devices = createBinding(bluetooth, "devices")
+const wpDevices = createBinding(wp, "devices")
+
+export const pairedDevices = createComputed(() =>
+  [...(devices() ?? [])]
+    .filter((device) => createBinding(device, "paired")())
+    .sort((left, right) => bluetoothDeviceName(left).localeCompare(bluetoothDeviceName(right))),
+)
+
+export const connectedCount = createComputed(
+  () => pairedDevices().filter((device) => createBinding(device, "connected")()).length,
+)
+
+export function bluetoothDeviceName(device: BluetoothDevice) {
+  return device.alias || device.name || device.address.toUpperCase()
 }
 
-export type BluetoothAudioCard = {
-  activeProfile: string
-  name: string
-  profiles: BluetoothProfile[]
+function isHeadsetProfile(profile: AstalWp.Profile) {
+  return /a2dp|handsfree|headset|hfp|hsp/i.test(profile.name)
 }
 
-export type BluetoothState = {
-  adapterAvailable: boolean
-  devices: BluetoothDevice[]
-  powered: boolean
+// The WirePlumber device for a Bluetooth device, matched by its BlueZ address.
+export function bluetoothAudioDevice(device: BluetoothDevice) {
+  return createComputed(
+    () =>
+      (wpDevices() ?? []).find(
+        (audioDevice) =>
+          audioDevice.get_pw_property("api.bluez5.address")?.toUpperCase() ===
+          device.address.toUpperCase(),
+      ) ?? null,
+  )
 }
 
-type PactlCard = {
-  active_profile?: string | { name?: string }
-  name?: string
-  profiles?: Record<string, { available?: boolean | string; description?: string }>
-  properties?: Record<string, string>
+export function headsetProfiles(audioDevice: AstalWp.Device) {
+  return createBinding(audioDevice, "profiles").as((profiles) =>
+    (profiles ?? [])
+      .filter(isHeadsetProfile)
+      .sort(
+        (left, right) =>
+          Number(right.available !== AstalWp.Available.NO) -
+          Number(left.available !== AstalWp.Available.NO),
+      ),
+  )
 }
 
-function bytesToString(bytes: Uint8Array) {
-  return String.fromCharCode(...bytes)
-}
+export function setBluetoothAudioProfile(audioDevice: AstalWp.Device, profile: AstalWp.Profile) {
+  if (profile.available === AstalWp.Available.NO) return
+  if (profile.index === audioDevice.active_profile_id) return
 
-function runSync(args: string[]) {
-  try {
-    const [ok, stdout, stderr, status] = GLib.spawn_sync(
-      null,
-      args,
-      null,
-      GLib.SpawnFlags.SEARCH_PATH,
-      null,
-    )
-
-    if (!ok || status !== 0) {
-      void stderr
-      return null
-    }
-
-    return bytesToString(stdout ?? new Uint8Array()).trim()
-  } catch (error) {
-    void error
-    return null
-  }
-}
-
-function runAsync(args: string[]) {
-  try {
-    GLib.spawn_async(null, args, null, GLib.SpawnFlags.SEARCH_PATH, null)
-  } catch (error) {
-    void error
-  }
-}
-
-function normalizeMac(mac: string) {
-  return mac.toUpperCase()
-}
-
-function cardAddress(mac: string) {
-  return normalizeMac(mac).replaceAll(":", "_")
-}
-
-export function getBluetoothState(): BluetoothState {
-  const devices = [...(bluetooth.devices ?? [])]
-    .filter((device) => device.paired)
-    .sort((left, right) => bluetoothDeviceName(left).localeCompare(bluetoothDeviceName(right)))
-
-  return {
-    adapterAvailable: Boolean(bluetooth.adapter),
-    devices,
-    powered: bluetooth.is_powered,
-  }
+  audioDevice.set_active_profile_id(profile.index)
 }
 
 export function connectBluetoothDevice(device: BluetoothDevice) {
-  try {
-    device.connect_device((_source, result) => {
-      try {
-        device.connect_device_finish(result)
-      } catch (error) {
-        void error
-      }
-    })
-  } catch (error) {
-    void error
-  }
+  device.connect_device((_source, result) => {
+    try {
+      device.connect_device_finish(result)
+    } catch (error) {
+      console.error(error)
+    }
+  })
 }
 
 export function disconnectBluetoothDevice(device: BluetoothDevice) {
-  try {
-    device.disconnect_device((_source, result) => {
-      try {
-        device.disconnect_device_finish(result)
-      } catch (error) {
-        void error
-      }
-    })
-  } catch (error) {
-    void error
-  }
+  device.disconnect_device((_source, result) => {
+    try {
+      device.disconnect_device_finish(result)
+    } catch (error) {
+      console.error(error)
+    }
+  })
 }
 
 export function setBluetoothPowered(powered: boolean) {
@@ -119,131 +90,14 @@ export function setBluetoothPowered(powered: boolean) {
   if (adapter && adapter.powered !== powered) adapter.powered = powered
 }
 
-export function connectBluetoothStateSignals(refresh: () => void) {
-  const deviceSignals: Array<readonly [BluetoothDevice, number]> = []
-  const bluetoothSignals = [
-    bluetooth.connect("notify::adapter", refresh),
-    bluetooth.connect("notify::adapters", refresh),
-    bluetooth.connect("notify::devices", refresh),
-    bluetooth.connect("notify::is-powered", refresh),
-    bluetooth.connect("notify::is-connected", refresh),
-    bluetooth.connect("adapter-added", refresh),
-    bluetooth.connect("adapter-removed", refresh),
-    bluetooth.connect("device-added", (_service, device) => {
-      deviceSignals.push(
-        ...connectBluetoothDeviceSignals(device, refresh).map((signal) => [device, signal] as const),
-      )
-      refresh()
-    }),
-    bluetooth.connect("device-removed", refresh),
-  ]
-
-  for (const device of bluetooth.devices ?? []) {
-    deviceSignals.push(
-      ...connectBluetoothDeviceSignals(device, refresh).map((signal) => [device, signal] as const),
-    )
-  }
-
-  return () => {
-    for (const signal of bluetoothSignals) bluetooth.disconnect(signal)
-    for (const [device, signal] of deviceSignals) device.disconnect(signal)
-  }
-}
-
-export function connectBluetoothDeviceSignals(device: BluetoothDevice, refresh: () => void) {
-  return [
-    device.connect("notify::alias", refresh),
-    device.connect("notify::connected", refresh),
-    device.connect("notify::connecting", refresh),
-    device.connect("notify::paired", refresh),
-    device.connect("notify::battery-percentage", refresh),
-  ]
-}
-
-export function bluetoothDeviceName(device: BluetoothDevice) {
-  return device.alias || device.name || normalizeMac(device.address)
-}
-
-function activeProfileName(card: PactlCard) {
-  if (typeof card.active_profile === "string") return card.active_profile
-
-  return card.active_profile?.name ?? ""
-}
-
-function isBluetoothAudioCard(card: PactlCard, mac: string) {
-  const address = cardAddress(mac)
-  const deviceString = card.properties?.["device.string"]
-
-  return card.name?.includes(address) || deviceString === normalizeMac(mac)
-}
-
-function isHeadsetProfile(name: string) {
-  const lower = name.toLowerCase()
-
-  return (
-    lower.includes("a2dp") ||
-    lower.includes("handsfree") ||
-    lower.includes("headset") ||
-    lower.includes("hfp") ||
-    lower.includes("hsp")
-  )
-}
-
-function isProfileAvailable(profile: { available?: boolean | string }) {
-  return profile.available !== false && profile.available !== "no"
-}
-
-export function getBluetoothAudioCard(mac: string): BluetoothAudioCard | null {
-  const output = runSync(["pactl", "-f", "json", "list", "cards"])
-
-  if (!output) return null
-
-  try {
-    const cards = JSON.parse(output) as PactlCard[]
-    const card = cards.find((candidate) => isBluetoothAudioCard(candidate, mac))
-
-    if (!card?.name || !card.profiles) return null
-
-    const activeProfile = activeProfileName(card)
-    const profiles = Object.entries(card.profiles)
-      .filter(([name]) => isHeadsetProfile(name))
-      .map(([name, profile]) => ({
-        active: name === activeProfile,
-        available: isProfileAvailable(profile),
-        description: profile.description || name,
-        name,
-      }))
-      .sort((left, right) => Number(right.available) - Number(left.available))
-
-    return {
-      activeProfile,
-      name: card.name,
-      profiles,
-    }
-  } catch (error) {
-    void error
-    return null
-  }
-}
-
-export function setBluetoothAudioProfile(card: BluetoothAudioCard, profile: BluetoothProfile) {
-  if (!profile.available || profile.active) return
-
-  runAsync(["pactl", "set-card-profile", card.name, profile.name])
-}
-
-function launchFirstAvailable(candidates: string[][]) {
-  const command = candidates.find(([program]) => GLib.find_program_in_path(program))
-
-  if (command) runAsync(command)
-}
-
 export function openBluetoothManager() {
-  launchFirstAvailable([
+  const command = [
     ["blueman-manager"],
     ["overskride"],
     ["blueberry"],
     ["gnome-control-center", "bluetooth"],
     ["systemsettings", "kcm_bluetooth"],
-  ])
+  ].find(([program]) => GLib.find_program_in_path(program))
+
+  if (command) execAsync(command).catch(console.error)
 }
