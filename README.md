@@ -51,3 +51,25 @@ in {
 ```
 
 Component states are derived inside the stylesheet. For example, active workspace uses `primary`, occupied workspace uses `secondary`, empty workspace uses transparent `secondary`, and hover colors are shaded from their base roles.
+
+## Primary output
+
+Notification popups, the OSD, and the system tray go on one "primary" output. List preferred outputs by connector name in priority order; the first one that is connected wins:
+
+```toml
+[outputs]
+primary = ["DP-1", "HDMI-A-1"]
+```
+
+Find connector names with `niri msg outputs`. If none of the listed outputs is connected (or the list is empty), popups use the first monitor GDK reports and the tray uses the first ready monitor. Changes to the file apply without restarting the shell.
+
+The settings panel (gear icon at the bottom of the bar) can also pick the primary monitor. That choice takes priority over the config list, is kept in memory only, and resets when the shell restarts.
+
+From Home Manager:
+
+```nix
+xdg.configFile."hf-shell/config.toml".source = toToml.generate "config.toml" {
+  colors = { ... };
+  outputs.primary = [ "DP-1" ];
+};
+```

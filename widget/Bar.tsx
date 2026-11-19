@@ -1,11 +1,14 @@
 import app from "ags/gtk4/app"
 import { Astal, Gtk, Gdk } from "ags/gtk4"
+import { With } from "gnim"
+import type { Accessor } from "gnim"
 import { setupEscapeToClosePanels } from "../service/Panels"
 import BluetoothControl from "./BluetoothControl"
 import NetworkControl from "./NetworkControl"
 import NotificationButton from "./NotificationButton"
 import PowerControl from "./PowerControl"
 import ScreenToolkit, { ScreenCaptureStopButton } from "./ScreenToolkit"
+import SettingsControl from "./SettingsControl"
 import SlackUnread from "./SlackUnread"
 import SoundControl from "./SoundControl"
 import SystemMonitor from "./SystemMonitor"
@@ -17,7 +20,7 @@ import Workspaces from "./Workspaces"
 export default function Bar(
   gdkmonitor: Gdk.Monitor,
   name = "bar",
-  { primary = true }: { primary?: boolean } = {},
+  { primary }: { primary: Accessor<boolean> },
 ) {
   const { TOP, BOTTOM, LEFT } = Astal.WindowAnchor
 
@@ -41,7 +44,9 @@ export default function Bar(
           <NotificationButton gdkmonitor={gdkmonitor} />
           <SlackUnread />
           <WorkspaceApps gdkmonitor={gdkmonitor} />
-          {primary ? <SystemTray /> : null}
+          <box orientation={Gtk.Orientation.VERTICAL} visible={primary}>
+            <With value={primary}>{(isPrimary) => (isPrimary ? <SystemTray /> : null)}</With>
+          </box>
         </box>
         <box $type="center" orientation={Gtk.Orientation.VERTICAL}>
           <Workspaces gdkmonitor={gdkmonitor} />
@@ -54,6 +59,7 @@ export default function Bar(
           <BluetoothControl />
           <SoundControl />
           <PowerControl />
+          <SettingsControl />
         </box>
       </centerbox>
     </window>

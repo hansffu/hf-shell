@@ -1,4 +1,5 @@
 import { Gtk } from "ags/gtk4"
+import GLib from "gi://GLib"
 import { createEffect } from "gnim"
 import type { Accessor } from "gnim"
 
@@ -45,12 +46,14 @@ export default function Select({
 
         for (const classPart of classes.split(" ")) select.add_css_class(classPart)
 
+        let initialized = false
+        let destroyed = false
+        let pendingSyncId = 0
+        let pending: { labels: string[]; selected: number } | null = null
+
         // Replacing the model resets the selection, so model and selection are synced
         // together and the resulting notify::selected is not treated as user input.
-        createEffect(() => {
-          const nextLabels = items()
-          const nextSelected = selected()
-
+        const sync = (nextLabels: string[], nextSelected: number) => {
           syncing = true
           if (nextLabels.join("\n") !== labels.join("\n")) {
             labels = nextLabels
@@ -58,6 +61,36 @@ export default function Select({
           }
           select.set_selected(nextSelected >= 0 ? nextSelected : 0)
           syncing = false
+        }
+
+        select.connect("destroy", () => {
+          destroyed = true
+          if (pendingSyncId) GLib.source_remove(pendingSyncId)
+          pendingSyncId = 0
+        })
+
+        createEffect(() => {
+          const nextLabels = items()
+          const nextSelected = selected()
+
+          if (!initialized) {
+            initialized = true
+            sync(nextLabels, nextSelected)
+            return
+          }
+
+          // Later updates are usually caused by the user picking an item. GTK is still inside
+          // the popup list's activation then, and replacing the model there frees the list
+          // it is about to notify (segfault), so apply updates once that has returned.
+          pending = { labels: nextLabels, selected: nextSelected }
+          if (pendingSyncId) return
+
+          pendingSyncId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            pendingSyncId = 0
+            if (!destroyed && pending) sync(pending.labels, pending.selected)
+            pending = null
+            return GLib.SOURCE_REMOVE
+          })
         })
 
         select.connect("notify::selected", () => {

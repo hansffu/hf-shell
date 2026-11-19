@@ -3,8 +3,14 @@ import { Gdk, Gtk } from "ags/gtk4"
 import { readFile } from "ags/file"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
-import { createRoot } from "gnim"
+import { createEffect, createRoot } from "gnim"
 import style from "./style.scss"
+import {
+  primaryOutputKey,
+  primaryOutputSetting,
+  setOutputs,
+  setPrimaryOutputKey,
+} from "./service/Outputs"
 import Bar from "./widget/Bar"
 import NotificationPopups from "./widget/NotificationPopups"
 
@@ -35,13 +41,12 @@ type MonitorDisplay = {
 type TrackedWindow = {
   window: Gtk.Window
   dispose: () => void
-  primary?: boolean
 }
 
 const barWindows = new Map<string, TrackedWindow>()
 let monitorList: MonitorList | null = null
 let syncTimerId = 0
-let primaryBarKey: string | null = null
+let primaryOutputs: string[] = []
 let notificationPopupsWindow: TrackedWindow | null = null
 let notificationPopupsMonitorKey: string | null = null
 
@@ -169,8 +174,14 @@ function normalizeColor(value: string) {
   return color
 }
 
-function parseThemeToml(contents: string) {
-  const colors: ThemeColors = {}
+type TomlEntry = {
+  section: string
+  key: string
+  value: string
+}
+
+function parseTomlEntries(contents: string) {
+  const entries: TomlEntry[] = []
   let section = ""
 
   for (const rawLine of contents.split(/\r?\n/)) {
@@ -185,21 +196,53 @@ function parseThemeToml(contents: string) {
     }
 
     const pair = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/)
-    if (!pair || (section && section !== "colors")) continue
+    if (pair) entries.push({ section, key: pair[1], value: pair[2] })
+  }
 
-    const name = pair[1]
-    if (!isThemeColorName(name)) continue
+  return entries
+}
 
-    colors[name] = normalizeColor(parseTomlString(pair[2]))
+function parseTomlStringArray(value: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    throw Error("Expected an array of strings, got " + value)
+  }
+
+  return [...trimmed.matchAll(/"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'/g)].map(
+    (match) => match[1] ?? match[2] ?? "",
+  )
+}
+
+function parseThemeToml(contents: string) {
+  const colors: ThemeColors = {}
+
+  for (const { section, key, value } of parseTomlEntries(contents)) {
+    if (section && section !== "colors") continue
+    if (!isThemeColorName(key)) continue
+
+    colors[key] = normalizeColor(parseTomlString(value))
   }
 
   return colors
 }
 
-function readRuntimeThemeColors(path: string) {
-  if (!GLib.file_test(path, GLib.FileTest.EXISTS)) return {}
+function parseOutputsToml(contents: string) {
+  for (const { section, key, value } of parseTomlEntries(contents)) {
+    if (section === "outputs" && key === "primary") return parseTomlStringArray(value)
+  }
 
-  return parseThemeToml(readFile(path))
+  return []
+}
+
+function readConfigFile(path: string) {
+  if (!GLib.file_test(path, GLib.FileTest.EXISTS)) return ""
+
+  return readFile(path)
+}
+
+function readRuntimeThemeColors(path: string) {
+  return parseThemeToml(readConfigFile(path))
 }
 
 function themeColorCss(colors: Record<ThemeColorName, string>) {
@@ -234,6 +277,23 @@ function loadRuntimeThemeConfig(path: string) {
   }
 }
 
+function loadOutputConfig(path: string) {
+  let nextPrimaryOutputs: string[] = []
+
+  try {
+    nextPrimaryOutputs = parseOutputsToml(readConfigFile(path))
+  } catch (error) {
+    logInfo("Failed to load output config from " + path + ": " + errorMessage(error))
+  }
+
+  const changed = nextPrimaryOutputs.join("\n") !== primaryOutputs.join("\n")
+
+  primaryOutputs = nextPrimaryOutputs
+  if (changed) logInfo("Primary output priority: " + (primaryOutputs.join(", ") || "(default)"))
+
+  return changed
+}
+
 function scheduleRuntimeThemeConfigReload(path: string) {
   if (runtimeThemeReloadTimerId) GLib.source_remove(runtimeThemeReloadTimerId)
 
@@ -243,6 +303,7 @@ function scheduleRuntimeThemeConfigReload(path: string) {
     () => {
       runtimeThemeReloadTimerId = 0
       loadRuntimeThemeConfig(path)
+      if (loadOutputConfig(path)) syncShellWindows()
       return GLib.SOURCE_REMOVE
     },
   )
@@ -295,6 +356,7 @@ function configureRuntimeThemeConfig() {
   const path = runtimeThemeConfigPath()
 
   loadRuntimeThemeConfig(path)
+  loadOutputConfig(path)
   watchRuntimeThemeConfig(path)
 }
 
@@ -320,6 +382,28 @@ function monitorKey(gdkmonitor: Gdk.Monitor, index: number): string | null {
     geometry.y,
     `${geometry.width}x${geometry.height}`,
   ].join("-")
+}
+
+type KeyedMonitor = {
+  gdkmonitor: Gdk.Monitor
+  key: string | null
+}
+
+// The output picked in the settings panel wins; otherwise the first connected output from
+// `[outputs] primary` in config.toml. Both match by connector name.
+function choosePreferredMonitor(monitors: KeyedMonitor[]) {
+  const setting = primaryOutputSetting()
+  const priority = setting ? [setting, ...primaryOutputs] : primaryOutputs
+
+  for (const output of priority) {
+    const match = monitors.find(
+      ({ gdkmonitor, key }) => key && monitorConnector(gdkmonitor) === output,
+    )
+
+    if (match) return match as KeyedMonitor & { key: string }
+  }
+
+  return null
 }
 
 function windowName(prefix: string, key: string) {
@@ -355,9 +439,20 @@ function closeWindow(record: TrackedWindow | null) {
   record.dispose()
 }
 
-function createBarWindow(gdkmonitor: Gdk.Monitor, key: string, primary: boolean) {
+function monitorLabel(gdkmonitor: Gdk.Monitor, key: string) {
+  const connector = monitorConnector(gdkmonitor)
+  const model = (gdkmonitor as Gdk.Monitor & { get_model?: () => string | null }).get_model?.()
+
+  if (connector && model) return `${model} (${connector})`
+
+  return connector || model || key
+}
+
+function createBarWindow(gdkmonitor: Gdk.Monitor, key: string) {
   const window = createTrackedWindow(() =>
-    Bar(gdkmonitor, windowName("bar", key), { primary }) as Gtk.Window
+    Bar(gdkmonitor, windowName("bar", key), {
+      primary: primaryOutputKey.as((primaryKey) => primaryKey === key),
+    }) as Gtk.Window
   )
   const monitor = gdkmonitor as MonitorIdentity
 
@@ -370,7 +465,7 @@ function createBarWindow(gdkmonitor: Gdk.Monitor, key: string, primary: boolean)
     scheduleShellWindowsSync()
   })
 
-  return { ...window, primary }
+  return window
 }
 
 function syncShellWindows({
@@ -378,31 +473,27 @@ function syncShellWindows({
   retriesRemaining = MONITOR_SYNC_MAX_RETRIES,
 } = {}) {
   const monitors = app.get_monitors()
+  const keyedMonitors = monitors.map((gdkmonitor, index) => ({
+    gdkmonitor,
+    key: monitorKey(gdkmonitor, index),
+  }))
+  const preferredMonitor = choosePreferredMonitor(keyedMonitors)
   const activeBarKeys = new Set<string>()
   let hasPendingMonitor = false
-  let nextPrimaryBarKey: string | null = null
+  const nextPrimaryBarKey =
+    preferredMonitor?.key ?? keyedMonitors.find(({ key }) => key)?.key ?? null
 
-  monitors.forEach((gdkmonitor, index) => {
-    const key = monitorKey(gdkmonitor, index)
-
+  keyedMonitors.forEach(({ gdkmonitor, key }) => {
     if (!key) {
       hasPendingMonitor = true
       return
     }
 
     activeBarKeys.add(key)
-    nextPrimaryBarKey ??= key
-
-    const existing = barWindows.get(key)
-    if (allowAdd && existing && existing.primary !== (key === nextPrimaryBarKey)) {
-      logInfo(`Recreating bar on display ${key}`)
-      closeWindow(existing)
-      barWindows.delete(key)
-    }
 
     if (allowAdd && !barWindows.has(key)) {
       logInfo(`Adding bar on display ${key}`)
-      barWindows.set(key, createBarWindow(gdkmonitor, key, key === nextPrimaryBarKey))
+      barWindows.set(key, createBarWindow(gdkmonitor, key))
     }
   })
 
@@ -414,10 +505,15 @@ function syncShellWindows({
     barWindows.delete(key)
   }
 
-  primaryBarKey = nextPrimaryBarKey
+  setPrimaryOutputKey(nextPrimaryBarKey)
+  setOutputs(
+    keyedMonitors.flatMap(({ gdkmonitor, key }) =>
+      key ? [{ key, connector: monitorConnector(gdkmonitor), label: monitorLabel(gdkmonitor, key) }] : [],
+    ),
+  )
 
-  const popupMonitor = monitors[0] ?? null
-  const popupMonitorKey = popupMonitor ? monitorKey(popupMonitor, 0) : null
+  const popupMonitor = preferredMonitor?.gdkmonitor ?? monitors[0] ?? null
+  const popupMonitorKey = preferredMonitor?.key ?? (popupMonitor ? keyedMonitors[0].key : null)
   if (popupMonitor && !popupMonitorKey) hasPendingMonitor = true
 
   if (
@@ -456,6 +552,27 @@ function watchMonitorChanges() {
   monitorList?.connect("items-changed", () => {
     syncShellWindows({ allowAdd: false })
     scheduleShellWindowsSync()
+  })
+}
+
+function watchPrimaryOutputSetting() {
+  let initialized = false
+
+  createRoot(() => {
+    createEffect(() => {
+      primaryOutputSetting()
+
+      if (!initialized) {
+        initialized = true
+        return
+      }
+
+      // Sync outside the effect so window creation is not tracked by it.
+      GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+        syncShellWindows()
+        return GLib.SOURCE_REMOVE
+      })
+    })
   })
 }
 
@@ -501,6 +618,7 @@ try {
       configureRuntimeThemeConfig()
       syncShellWindows()
       watchMonitorChanges()
+      watchPrimaryOutputSetting()
     },
   })
 

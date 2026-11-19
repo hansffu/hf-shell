@@ -367,6 +367,18 @@ window.Bar {
     }
   }
 
+  menubutton.settings-control {
+    margin: 0.375rem 0.1875rem;
+
+    > button {
+      border: 0;
+      border-radius: 0.25rem;
+      min-height: 1.5rem;
+      min-width: 1.5rem;
+      padding: 0.0625rem;
+    }
+  }
+
   menubutton.system-monitor {
     margin: 0.375rem 0.1875rem 0;
 
@@ -652,6 +664,22 @@ window.Bar {
   .network-row-status {
     color: $hf_shell_on_surface;
     font-size: 0.72rem;
+  }
+
+  .settings-menu {
+    min-width: 25rem;
+    padding: 1.25rem;
+  }
+
+  .settings-row-title {
+    color: $hf_shell_on_surface;
+    font-size: 0.72rem;
+    margin-right: 0.5rem;
+    min-width: 6.5rem;
+  }
+
+  .settings-select {
+    min-width: 13rem;
   }
 
   .system-monitor-menu {
