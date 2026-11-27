@@ -50,7 +50,6 @@ type GraphContext = {
   fill(): void
   lineTo(x: number, y: number): void
   moveTo(x: number, y: number): void
-  rectangle(x: number, y: number, width: number, height: number): void
   setLineWidth(width: number): void
   setSourceRGBA(red: number, green: number, blue: number, alpha: number): void
   stroke(): void
@@ -319,7 +318,6 @@ function createTemperatureIcon(): TemperatureIcon {
 }
 
 function drawGraph(
-  area: Gtk.DrawingArea,
   history: number[],
   hoverIndex: number | null,
   cr: GraphContext,
@@ -333,12 +331,6 @@ function drawGraph(
   const graphWidth = Math.max(1, width - padding * 2)
   const graphHeight = Math.max(1, height - padding * 2)
   const values = history.length > 0 ? history : [0]
-
-  void area
-
-  cr.setSourceRGBA(0.11, 0.12, 0.15, 1)
-  cr.rectangle(0, 0, width, height)
-  cr.fill()
 
   cr.setLineWidth(1)
   cr.setSourceRGBA(1, 1, 1, 0.08)
@@ -416,8 +408,8 @@ function createUsageGraph(
   area.add_css_class("system-monitor-graph")
   area.set_content_width(280)
   area.set_content_height(82)
-  area.set_draw_func((drawingArea: Gtk.DrawingArea, cr: GraphContext, width: number, height: number) => {
-    drawGraph(drawingArea, history, hoverIndex, cr, width, height, red, green, blue)
+  area.set_draw_func((_area: Gtk.DrawingArea, cr: GraphContext, width: number, height: number) => {
+    drawGraph(history, hoverIndex, cr, width, height, red, green, blue)
   })
   motion.connect("motion", (_controller: Gtk.EventControllerMotion, x: number) => {
     const values = history.length > 0 ? history : [0]

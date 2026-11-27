@@ -4,7 +4,7 @@
 
 `hf-shell` loads bundled defaults, then watches `$XDG_CONFIG_HOME/hf-shell/config.toml` for runtime overrides. Set `HF_SHELL_THEME_CONFIG` to point at another TOML file.
 
-The public theme contract is a small set of color roles:
+Use `[colors]` for the theme palette and `[appearance]` for background opacity.
 
 ```toml
 [colors]
@@ -19,9 +19,14 @@ secondary = "#c678dd"
 danger = "#ff6c6b"
 warning = "#e5c07b"
 on_accent = "#1c1f24"
+
+[appearance]
+background_opacity = 0.8
 ```
 
-For Stylix/Home Manager, generate those roles from `config.lib.stylix.colors`:
+`background_opacity` ranges from 0 to 1 and defaults to 1. It sets the alpha multiplier for the bar, panels, and tray menus. Panel sections use a lighter tint and softer inset shadows when the panel is translucent. Niri can blur these surfaces with a layer rule matching `^hf-shell-bar$` and its `popups` block.
+
+For Stylix/Home Manager, generate the color roles from `config.lib.stylix.colors` and set the opacity in the same file.
 
 ```nix
 { config, lib, ... }:
@@ -46,6 +51,9 @@ in {
   xdg.configFile."hf-shell/config.toml".text = ''
     [colors]
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList tomlColor colors)}
+
+    [appearance]
+    background_opacity = 0.8
   '';
 }
 ```

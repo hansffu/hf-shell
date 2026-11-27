@@ -53,6 +53,7 @@ let notificationPopupsMonitorKey: string | null = null
 const MONITOR_SYNC_DELAY_MS = 500
 const MONITOR_SYNC_MAX_RETRIES = 8
 const RUNTIME_THEME_RELOAD_DELAY_MS = 100
+const DEFAULT_BACKGROUND_OPACITY = 1
 const THEME_COLOR_NAMES = [
   "bg",
   "surface",
@@ -216,15 +217,28 @@ function parseTomlStringArray(value: string) {
 
 function parseThemeToml(contents: string) {
   const colors: ThemeColors = {}
+  let backgroundOpacity = DEFAULT_BACKGROUND_OPACITY
 
   for (const { section, key, value } of parseTomlEntries(contents)) {
+    if (section === "appearance" && key === "background_opacity") {
+      const opacity = Number(value)
+
+      if (Number.isFinite(opacity) && opacity >= 0 && opacity <= 1) {
+        backgroundOpacity = opacity
+      } else {
+        logInfo("Ignoring appearance.background_opacity. Expected a number between 0 and 1.")
+      }
+
+      continue
+    }
+
     if (section && section !== "colors") continue
     if (!isThemeColorName(key)) continue
 
     colors[key] = normalizeColor(parseTomlString(value))
   }
 
-  return colors
+  return { colors, backgroundOpacity }
 }
 
 function parseOutputsToml(contents: string) {
@@ -241,20 +255,27 @@ function readConfigFile(path: string) {
   return readFile(path)
 }
 
-function readRuntimeThemeColors(path: string) {
-  return parseThemeToml(readConfigFile(path))
-}
-
-function themeColorCss(colors: Record<ThemeColorName, string>) {
-  return THEME_COLOR_NAMES.map(
-    (name) => "@define-color hf_shell_" + name + " " + colors[name] + ";",
-  ).join("\n")
-}
-
 function composeRuntimeCss(path: string) {
-  const colors = { ...DEFAULT_THEME_COLORS, ...readRuntimeThemeColors(path) }
+  const theme = parseThemeToml(readConfigFile(path))
+  const colors = { ...DEFAULT_THEME_COLORS, ...theme.colors }
 
-  return [themeColorCss(colors), shellStyleCss()].join("\n")
+  const definitions = THEME_COLOR_NAMES.map(
+    (name) => "@define-color hf_shell_" + name + " " + colors[name] + ";",
+  )
+  definitions.push(`@define-color hf_shell_panel_bg alpha(@hf_shell_bg, ${theme.backgroundOpacity});`)
+
+  // Raised surfaces sit on top of the panel background. Use a light tint in
+  // translucent panels to avoid stacking nearly opaque fills.
+  const raisedOpacity = theme.backgroundOpacity === DEFAULT_BACKGROUND_OPACITY
+    ? DEFAULT_BACKGROUND_OPACITY
+    : theme.backgroundOpacity * 0.25
+  definitions.push(
+    `@define-color hf_shell_panel_raised_bg alpha(shade(@hf_shell_surface, 1.2), ${raisedOpacity});`,
+    `@define-color hf_shell_graph_bg alpha(#1c1e26, ${raisedOpacity});`,
+    `@define-color hf_shell_panel_section_shadow alpha(black, ${theme.backgroundOpacity ** 2});`,
+  )
+
+  return [...definitions, shellStyleCss()].join("\n")
 }
 
 function resetRuntimeThemeProvider() {
